@@ -44,6 +44,8 @@ test('the standalone build is self-contained (no server URLs left behind)', () =
   assert.ok(html.includes('__TEEN_PATTI_STANDALONE__ = true'), 'the standalone flag is set');
   assert.ok(html.includes('__require("public/js/app.js")'), 'the entry module is required at the end');
   assert.ok(html.includes('const $$ ='), 'dollar signs survive bundling (no replace() escaping bugs)');
+  assert.ok(html.includes("box.id = 'boot-error'"), 'the boot-failure banner ships in the single file');
+  assert.ok(html.includes('window.__teenPattiReady = true'), 'the boot flag the banner watches for ships too');
   fs.rmSync(result.path, { force: true });
 });
 

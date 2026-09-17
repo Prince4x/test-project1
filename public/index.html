@@ -7,6 +7,67 @@
 <title>Teen Patti Arena · Indian Poker</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎴</text></svg>" />
 <link rel="stylesheet" href="/styles.css" />
+
+<!--
+  If anything stops the game from starting, say so on screen instead of leaving
+  a blank page. This runs before every other script and must stay classic (not
+  type="module") so it also works when PLAY-ME-first.html is opened from disk.
+-->
+<script>
+(function () {
+  var shown = false;
+
+  // The test suite runs this page in jsdom and deliberately tears the DOM down
+  // mid-flight; this banner is for real browsers only.
+  if (navigator.userAgent && navigator.userAgent.indexOf('jsdom') !== -1) return;
+
+  function report(kind, detail) {
+    if (shown) return;
+    shown = true;
+    try {
+      var box = window.document.createElement('div');
+      box.id = 'boot-error';
+      box.setAttribute('role', 'alert');
+      box.setAttribute('style', 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#3b0d12;color:#ffe9ec;border-top:2px solid #ff5470;padding:14px 16px;font:13px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;white-space:pre-wrap;max-height:45vh;overflow:auto;text-align:left');
+      box.textContent = 'Teen Patti Arena could not start — ' + kind + '\n\n' + detail +
+        '\n\nWhat to try:\n' +
+        '  1. Reload this page (Ctrl+R, or Cmd+R on a Mac).\n' +
+        '  2. Playing alone is always possible: open PLAY-ME-first.html (double-click it).\n' +
+        '  3. Live tables need the server running: double-click START-WINDOWS.bat\n' +
+        '     (or run "node server/index.js"), then open http://localhost:4000\n' +
+        '  4. On a friend\'s device, always use the "Same Wi-Fi" address\n' +
+        '     (http://<your-ip>:4000) — localhost only ever points at their own device.\n' +
+        '\nPlease copy this whole message when asking for help.';
+      var body = window.document.body || window.document.documentElement;
+      body.appendChild(box);
+    } catch (err) { /* nothing left to do */ }
+  }
+
+  window.addEventListener('error', function (e) {
+    var msg = (e && (e.message || (e.error && e.error.message))) || 'unknown error';
+    var where = e && e.filename ? '\n  at ' + e.filename + ':' + e.lineno + ':' + e.colno : '';
+    report('script error', msg + where);
+  });
+
+  window.addEventListener('unhandledrejection', function (e) {
+    // The offline single file is allowed to fail network calls — it works without a server.
+    if (window.__TEEN_PATTI_STANDALONE__) return;
+    var r = e && e.reason;
+    report('a request failed', (r && (r.stack || r.message)) || String(r));
+  });
+
+  window.addEventListener('load', function () {
+    try {
+      window.setTimeout(function () {
+        try {
+          if (window.__teenPattiReady || shown) return;
+          report('timeout', 'The page loaded but the game never finished starting (waited 8 seconds).');
+        } catch (err) { /* ignore */ }
+      }, 8000);
+    } catch (err) { /* ignore */ }
+  });
+})();
+</script>
 </head>
 <body data-theme="dark">
 

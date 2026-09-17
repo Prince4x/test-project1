@@ -118,6 +118,31 @@ class App {
     host.hidden = false;
   }
 
+  /**
+   * False once teardown() has run. Async work and animations check this so a
+   * late response or a queued frame cannot touch a screen that is already gone.
+   */
+  get alive() {
+    return !this.disposed;
+  }
+
+  /**
+   * Safe requestAnimationFrame for the shell: stops after teardown and falls
+   * back to a timer where rAF does not exist (old browsers, jsdom, tests).
+   */
+  frame(callback) {
+    if (!this.alive) return;
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, 16);
+    schedule(() => {
+      if (!this.alive) return;
+      try {
+        callback();
+      } catch { /* the screen may be gone */ }
+    });
+  }
+
   init() {
     this.disposed = false;
     this.applyTheme(this.store.settings.theme, { silent: true });
@@ -1013,3 +1038,7 @@ class App {
 const app = new App().init();
 app.refreshTables();
 window.app = app;   // handy for debugging from the console
+
+// Tells the in-page diagnostic watchdog in index.html that we started cleanly:
+// if this flag never appears, the boot banner explains what went wrong.
+window.__teenPattiReady = true;

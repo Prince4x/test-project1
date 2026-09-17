@@ -1,0 +1,81 @@
+TEEN PATTI ARENA - READ THIS FIRST
+==================================
+
+TWO WAYS TO PLAY
+----------------
+
+A. Alone against the computer - nothing to install, works offline
+   Double-click  PLAY-ME-first.html  then press "Practice vs AI".
+   No server, no internet, no permissions needed.
+
+B. With friends or family on other devices - needs Node.js
+   1. Double-click  START-WINDOWS.bat
+      (macOS / Linux: START-MAC-LINUX.command)
+   2. A window opens and prints a link like:
+
+         Friends on the same Wi-Fi open:  http://192.168.1.5:4000
+
+   3. Send that link to your friend (WhatsApp, SMS, anything). They open it
+      in any browser, press "Sit down", and you are playing together.
+   4. Leave both windows open while you play. Closing the black window
+      stops the game for everyone.
+
+
+WINDOWS BLOCKED THE FILE? - VERY COMMON
+----------------------------------------
+If double-clicking START-WINDOWS.bat shows "Windows protected your PC"
+(or nothing happens at all), Windows has flagged the file because it came
+from the internet. Any one of these fixes it:
+
+  * Click "More info"  ->  "Run anyway"
+  * Or: right-click START-WINDOWS.bat -> Properties -> tick "Unblock" -> OK
+  * Or: just use PLAY-ME-first.html (plan A above). It is a plain web page
+    and never needs permission.
+
+Browsers and antivirus never block PLAY-ME-first.html, so if you only want
+to practise, use that and ignore everything below.
+
+
+NOTHING HAPPENS / SOMETHING IS WRONG
+------------------------------------
+The game now shows a red bar at the bottom of the page with the exact error
+message when it cannot start. Copy that message to get help.
+
+  "Can't reach this page" in the browser
+      The server is not running. Double-click START-WINDOWS.bat and keep
+      the window it opens. If it closes straight away, look at the
+      minimised "Teen Patti Arena server" window - it prints the reason,
+      usually that port 4000 is already used by another program.
+
+  The page is blank / white
+      Wait 3 seconds and reload (Ctrl+R). If a red bar appears, send us the
+      text on it. If not, check that PLAY-ME-first.html was not renamed or
+      moved.
+
+  My friend cannot connect
+      1. Are you both on the SAME Wi-Fi? Mobile data will not work.
+      2. The link must use the "Same Wi-Fi" address, e.g. http://192.168.1.5:4000
+         A link saying localhost only works on the PC running the server.
+      3. Windows Firewall: the first time Node.js listens, Windows asks.
+         Choose "Allow" and tick "Private networks". If you missed it,
+         allow it again from Windows Security -> Firewall & network protection
+         -> Allow an app through firewall -> Node.js.
+      4. Guest Wi-Fi and some office/college networks block devices from
+         talking to each other. Try a phone hotspot instead: connect both
+         devices to the hotspot and use the new address.
+
+  We are not on the same network at all
+      Use a tunnel:  cloudflared tunnel --url http://localhost:4000
+      It prints a public https://... link you can send anywhere.
+      Other options and a Docker/Render deploy are in README.md under
+      "Play with friends".
+
+
+WHAT EACH FILE IS
+-----------------
+  PLAY-ME-first.html        The whole game in one file. Open it and play.
+  START-WINDOWS.bat         Starts the server and opens the game (Windows).
+  START-MAC-LINUX.command   Same thing on macOS / Linux.
+  server/  src/  public/    The full project (server, card engine, UI).
+  README.md                 Everything, in detail, including how to deploy.
+  test/                     The automated test suite (npm test).
