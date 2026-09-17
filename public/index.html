@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0f14" />
+<title>Teen Patti Arena · Indian Poker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎴</text></svg>" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-theme="dark">
+
+<!-- ══════════════════════════════════ LOBBY ══════════════════════════════════ -->
+<section id="lobby" class="screen active">
+  <header class="lobby-top">
+    <div class="brand">
+      <div class="logo">🎴</div>
+      <div>
+        <h1>Teen Patti <span>Arena</span></h1>
+        <p>Indian Poker · Trail beats everything</p>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="row" id="profile-chip"></div>
+    <button class="btn icon" id="btn-sound" title="Sound on/off">🔊</button>
+    <button class="btn icon" id="btn-theme" title="Light / dark felt">🌙</button>
+    <button class="btn icon" id="btn-settings" title="Settings">⚙️</button>
+    <button class="btn icon" id="btn-help" title="How to play">❓</button>
+  </header>
+
+  <div class="lobby-body">
+    <section class="lobby-hero card-panel">
+      <div class="hero-copy">
+        <h2 id="hero-title">Welcome to the table</h2>
+        <p id="hero-copy">Choose a mode below — practise against four AI personalities, or sit down at a live table and see how far your chips travel.</p>
+      </div>
+      <div class="spacer"></div>
+      <div class="row wrap">
+        <span class="pill gold" id="pill-connection">● Offline</span>
+        <span class="pill" id="pill-tables">0 tables</span>
+      </div>
+    </section>
+
+    <div class="lobby-grid">
+      <!-- play -->
+      <section class="panel card-panel">
+        <header><span class="icon">🎯</span><h3>Play now</h3></header>
+        <div class="mode-cards">
+          <button class="mode-card" id="btn-practice">
+            <span class="emoji">🤖</span>
+            <span>
+              <strong>Practice vs AI</strong>
+              <span>Instant game against four bot personalities. No connection needed, chips refill automatically.</span>
+            </span>
+          </button>
+          <button class="mode-card" id="btn-online">
+            <span class="emoji">🌐</span>
+            <span>
+              <strong>Live table (multiplayer)</strong>
+              <span>Real-time table with chat — invite friends, or play alongside AI regulars while you wait.</span>
+            </span>
+          </button>
+          <button class="mode-card" id="btn-tutorial">
+            <span class="emoji">🎓</span>
+            <span>
+              <strong>Tutorial</strong>
+              <span>Learn Blind vs Seen play, Chaal, Side Show and hand rankings in two minutes.</span>
+            </span>
+          </button>
+        </div>
+
+        <details class="tiny" id="practice-options">
+          <summary class="muted" style="cursor:pointer">Practice settings</summary>
+          <div class="split" style="margin-top:12px">
+            <div class="field">
+              <label for="practice-players">Players at the table</label>
+              <select id="practice-players">
+                <option value="2">2 players (heads-up)</option>
+                <option value="3">3 players</option>
+                <option value="4" selected>4 players</option>
+                <option value="5">5 players</option>
+                <option value="6">6 players (full table)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="practice-boot">Boot (ante) per hand</label>
+              <select id="practice-boot">
+                <option value="5">5 chips</option>
+                <option value="10" selected>10 chips</option>
+                <option value="25">25 chips</option>
+                <option value="100">100 chips</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="practice-rounds">Betting rounds before compulsory show</label>
+              <select id="practice-rounds">
+                <option value="2">2 rounds</option>
+                <option value="3">3 rounds</option>
+                <option value="4" selected>4 rounds</option>
+                <option value="8">8 rounds (long)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="practice-timer">Turn timer</label>
+              <select id="practice-timer">
+                <option value="12">12 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="25" selected>25 seconds</option>
+                <option value="0">No timer</option>
+              </select>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- tables -->
+      <section class="panel card-panel">
+        <header><span class="icon">🃏</span><h3>Live tables</h3><div class="spacer"></div>
+          <button class="btn small ghost" id="btn-refresh">↻ Refresh</button>
+        </header>
+        <div class="table-list" id="table-list"><p class="muted tiny">Looking for tables…</p></div>
+        <button class="btn primary" id="btn-create">＋ Create your own table</button>
+      </section>
+
+      <!-- stats + leaderboard -->
+      <section class="panel card-panel">
+        <header><span class="icon">📈</span><h3>Your statistics</h3></header>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="row"><span class="pill" id="pill-best-hand">Best hand: —</span></div>
+        <header style="margin-top:6px"><span class="icon">🏆</span><h3>Leaderboard</h3></header>
+        <div class="board" id="leaderboard"><p class="muted tiny">Play a hand to appear here.</p></div>
+        <button class="btn small ghost" id="btn-reset-stats">Reset my statistics</button>
+      </section>
+
+      <!-- rules -->
+      <section class="panel card-panel" style="grid-column: 1 / -1">
+        <header><span class="icon">📜</span><h3>Hand rankings — strongest to weakest</h3>
+          <div class="spacer"></div><span class="pill gold">Trail &gt; Pure Sequence &gt; Sequence &gt; Colour &gt; Pair &gt; High Card</span>
+        </header>
+        <div class="rank-chart" id="rank-chart"></div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════ GAME ══════════════════════════════════ -->
+<section id="game" class="screen">
+  <header class="game-top">
+    <button class="btn small" id="btn-leave">← Lobby</button>
+    <div class="title">
+      <b id="game-table-name">Table</b>
+      <span id="game-table-meta">Hand #1 · boot 10</span>
+    </div>
+    <div class="top-stats">
+      <span class="pill gold" id="game-pot">Pot 0</span>
+      <span class="pill" id="game-stake">Stake 10</span>
+      <span class="pill blue" id="game-round">Round 1/4</span>
+      <span class="pill green" id="game-chips">💠 1000</span>
+    </div>
+    <div class="top-actions">
+      <button class="btn small icon" id="btn-rankings" title="Hand rankings">📜</button>
+      <button class="btn small icon" id="btn-history" title="Hand history">🕘</button>
+      <button class="btn small icon" id="btn-chat" title="Chat &amp; table talk">💬</button>
+      <button class="btn small icon" id="btn-settings-game" title="Settings">⚙️</button>
+    </div>
+  </header>
+
+  <main class="table-area" id="table-area">
+    <div class="felt" id="felt">
+      <div class="felt-logo">Teen Patti</div>
+      <div class="center-stack">
+        <div class="pot-display" id="pot-display">
+          <div>
+            <div class="pot-label">Pot</div>
+            <div class="pot-value" id="pot-value">0</div>
+          </div>
+          <div class="chip-stack" id="pot-chips"></div>
+        </div>
+        <div class="row wrap" style="justify-content:center" id="deal-area"></div>
+      </div>
+      <div id="seats"></div>
+      <div id="winner-banner-host"></div>
+    </div>
+  </main>
+
+  <footer class="player-panel">
+    <div class="my-cards">
+      <div class="hole-cards" id="my-cards"></div>
+      <div class="hand-label">
+        <b id="my-hand-name">Cards not seen</b>
+        <span id="my-hand-note">You are playing blind — bets cost half</span>
+      </div>
+    </div>
+    <div class="action-bar" id="action-bar"></div>
+  </footer>
+
+  <!-- chat drawer -->
+  <aside class="drawer" id="chat-drawer">
+    <header>
+      <span class="icon">💬</span><h3>Table talk</h3>
+      <div class="spacer"></div>
+      <button class="btn small icon" data-close-drawer>✕</button>
+    </header>
+    <div class="body" id="chat-body"></div>
+    <footer style="flex-direction:column; align-items:stretch; gap:8px">
+      <div class="reaction-bar" id="reaction-bar"></div>
+      <div class="row">
+        <input id="chat-input" placeholder="Say something friendly…" maxlength="180"
+               style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:rgba(0,0,0,0.22)" />
+        <button class="btn primary small" id="chat-send">Send</button>
+      </div>
+    </footer>
+  </aside>
+
+  <!-- log drawer -->
+  <aside class="drawer" id="log-drawer">
+    <header>
+      <span class="icon">🕘</span><h3>Hand history</h3>
+      <div class="spacer"></div>
+      <button class="btn small icon" data-close-drawer>✕</button>
+    </header>
+    <div class="body" id="history-body"></div>
+  </aside>
+
+  <!-- rankings drawer -->
+  <aside class="drawer" id="rankings-drawer">
+    <header>
+      <span class="icon">📜</span><h3>Hand rankings</h3>
+      <div class="spacer"></div>
+      <button class="btn small icon" data-close-drawer>✕</button>
+    </header>
+    <div class="body" id="rankings-body"></div>
+  </aside>
+</section>
+
+<div id="modal-root"></div>
+<div id="toasts"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

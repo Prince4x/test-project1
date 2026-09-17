@@ -1,0 +1,8 @@
+# dependencies (dev-only: jsdom powers the browser-side tests)
+node_modules/
+
+# logs & local state
+*.log
+.DS_Store
+.env
+.data/
