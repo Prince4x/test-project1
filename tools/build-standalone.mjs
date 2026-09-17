@@ -1,0 +1,157 @@
+/**
+ * Builds the single-file, double-clickable version of the game.
+ *
+ *   node tools/build-standalone.mjs [output.html]
+ *
+ * The whole app is ES modules, so this is a tiny bundler: it wraps every client
+ * module in a definition function with a 20-line module runtime, rewrites the
+ * `import` statements to `__require()` calls and inlines the stylesheet, the
+ * markup and the bundle into one .html file. No network, no server, no build
+ * tooling — open it and play.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const OUT = process.argv[2] || path.join(root, 'dist', 'teen-patti-standalone.html');
+
+/** Module id → file. Ids mirror the URLs the browser uses. */
+const MODULES = [
+  'src/engine/cards.js',
+  'src/engine/evaluator.js',
+  'src/engine/table.js',
+  'src/engine/ai.js',
+  'public/js/store.js',
+  'public/js/sound.js',
+  'public/js/ui.js',
+  'public/js/net.js',
+  'public/js/practice.js',
+  'public/js/game-view.js',
+  'public/js/app.js'          // entry point, loaded last
+];
+
+const ENTRY = 'public/js/app.js';
+
+/** Canonical module id for a specifier, from the point of view of `fromFile`. */
+function resolveId(specifier, fromFile) {
+  if (specifier.startsWith('/engine/')) return `src/engine/${specifier.slice('/engine/'.length)}`;
+  if (specifier.startsWith('/js/')) return `public/js/${specifier.slice('/js/'.length)}`;
+  if (specifier.startsWith('/shared/')) return `src/${specifier.slice('/shared/'.length)}`;
+  if (specifier.startsWith('.')) return path.normalize(path.join(path.dirname(fromFile), specifier));
+  throw new Error(`Cannot resolve ${specifier} from ${fromFile}`);
+}
+
+/**
+ * Rewrite one ES module into a CommonJS-ish factory body.
+ * Handles the exact syntax the project uses: named imports (single or multi
+ * line), `export const/function/class`, `export default <name>|{...}` and
+ * `export { a, b }`.
+ */
+function transform(source, file) {
+  const named = [];
+  let defaultName = null;
+  let body = source;
+
+  // import { a, b } from 'x';   (may span lines)
+  body = body.replace(/^import\s+\{([^}]*)\}\s+from\s+'([^']+)';?[ \t]*$/gm, (match, names, specifier) => {
+    const list = names.split(',').map((name) => name.trim()).filter(Boolean).join(', ');
+    return `const { ${list} } = __require(${JSON.stringify(resolveId(specifier, file))});`;
+  });
+
+  // export default Name;  /  export default { ... };
+  body = body.replace(/^export default ([A-Za-z_$][\w$]*);[ \t]*$/gm, (match, name) => {
+    defaultName = name;
+    return '';
+  });
+  body = body.replace(/^export default (\{[\s\S]*?\});[ \t]*$/gm, (match, literal) => `__exports.default = ${literal};`);
+
+  // export { a, b };
+  body = body.replace(/^export \{([^}]*)\};[ \t]*$/gm, (match, names) => {
+    const pairs = names.split(',').map((name) => name.trim()).filter(Boolean).map((name) => {
+      const [local, exported = local] = name.split(/\s+as\s+/);
+      return `__exports.${exported.trim()} = ${local.trim()};`;
+    });
+    return pairs.join('\n');
+  });
+
+  // export const / let / var / function / async function / class Name
+  body = body.replace(/^export\s+(const|let|var|function|async function|class)\s+([A-Za-z_$][\w$]*)/gm, (match, kind, name) => {
+    named.push(name);
+    return `${kind} ${name}`;
+  });
+
+  const epilogue = [];
+  for (const name of named) epilogue.push(`__exports.${name} = ${name};`);
+  if (defaultName) epilogue.push(`__exports.default = ${defaultName};`);
+
+  // Guard: nothing may close the inline <script> element.
+  const compiled = `${body}\n${epilogue.join('\n')}`;
+  if (compiled.includes('</script')) throw new Error(`${file} contains a literal </script>`);
+  return compiled;
+}
+
+export function build({ entry = ENTRY, modules = MODULES } = {}) {
+  const order = [...modules.filter((file) => file !== entry), entry];
+
+  const definitions = order.map((file) => {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    return `__define(${JSON.stringify(file)}, function (__exports, __require) {\n${transform(source, file)}\n});`;
+  });
+
+  const runtime = `(function () {
+  'use strict';
+  var __modules = {};
+  var __cache = {};
+  function __define(id, factory) { __modules[id] = factory; }
+  function __require(id) {
+    if (__cache[id]) return __cache[id].exports;
+    var module = { exports: {} };
+    __cache[id] = module;
+    if (!__modules[id]) throw new Error('Missing module: ' + id);
+    __modules[id](module.exports, __require);
+    return module.exports;
+  }
+${definitions.join('\n')}
+  __require(${JSON.stringify(entry)});
+})();`;
+
+  const html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public', 'styles.css'), 'utf8');
+
+  const banner = `<!--
+  Teen Patti Arena — single-file offline build.
+  Generated by tools/build-standalone.mjs — do not edit by hand.
+  Practice vs AI runs entirely in this file: no server, no internet, no install.
+-->`;
+
+  const standaloneFlag = '<script>window.__TEEN_PATTI_STANDALONE__ = true;</script>';
+
+  // NOTE: replacement *functions* are mandatory here — in a replacement string
+  // `$$` collapses to `$` and `$&` expands the match, which would silently
+  // corrupt the bundled source (the app has a `$$` helper).
+  let out = html
+    .replace('<link rel="stylesheet" href="/styles.css" />', () => `<style>\n${css}\n</style>`)
+    .replace('<script type="module" src="/js/app.js"></script>', () => `${standaloneFlag}\n<script>\n${runtime}\n</script>`)
+    .replace('<title>Teen Patti Arena · Indian Poker</title>', () => '<title>Teen Patti Arena · Offline</title>');
+
+  if (!out.includes('<style>')) throw new Error('stylesheet was not inlined — did index.html change?');
+  if (!out.includes('__TEEN_PATTI_STANDALONE__')) throw new Error('bundle was not inlined — did index.html change?');
+  // Regression guard: the bundler must never mangle dollar signs in the source.
+  for (const marker of ['const $$ =', '__exports.$$ = $$;']) {
+    if (!out.includes(marker)) throw new Error(`bundling corrupted the source (missing "${marker}")`);
+  }
+  out = `${banner}\n${out}`;
+
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, out);
+  return { path: OUT, html: out, bytes: Buffer.byteLength(out), modules: order.length };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const result = build();
+  const kb = (result.bytes / 1024).toFixed(0);
+  console.log(`✅ Single-file build → ${path.resolve(result.path)} (${result.modules} modules, ${kb} KB)`);
+  console.log('   Double-click it, then press “Practice vs AI”. No server needed.');
+}

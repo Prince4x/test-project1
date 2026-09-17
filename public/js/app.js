@@ -14,6 +14,13 @@ import {
   el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSigned, inviteLink, copyToClipboard
 } from '/js/ui.js';
 
+/**
+ * The single-file build (`tools/build-standalone.mjs`) runs from a plain file://
+ * URL with no server behind it: practice mode works fully, multiplayer is
+ * switched off with a friendly explanation instead of a broken fetch.
+ */
+const STANDALONE = Boolean(window.__TEEN_PATTI_STANDALONE__);
+
 const SPEED = { slow: 1.6, normal: 1, fast: 0.55 };
 
 class App {
@@ -126,6 +133,13 @@ class App {
     };
     $('#profile-chip').onclick = () => this.openProfileEditor();
     this.syncTopButtons();
+    if (STANDALONE) {
+      $('#hero-title').textContent = 'Your offline Teen Patti table';
+      $('#hero-copy').textContent = 'This single-file build runs straight from your disk — no server, no internet. Press “Practice vs AI” to deal. Everything else (rules, AI, stats, sounds) is identical to the online game.';
+      $('#btn-online').querySelector('span span').textContent = 'Needs the full project — run "npm start" for live tables.';
+      $('#btn-online').disabled = true;
+      $('#btn-online').title = 'Multiplayer needs the Node server from the full project';
+    }
   }
 
   syncTopButtons() {
@@ -299,6 +313,11 @@ class App {
   // ───────────────────────────────────────────────────────────────── online ──
 
   startOnline({ tableId = null, buyIn = null } = {}) {
+    if (STANDALONE) {
+      this.sound.error();
+      toast('Multiplayer needs the full project — run "npm start" and open localhost:4000', { kind: 'warn', timeout: 5200 });
+      return;
+    }
     this.teardown();
     this.mode = 'online';
     this.sound.resume();
@@ -415,6 +434,20 @@ class App {
   }
 
   refreshTables() {
+    if (STANDALONE) {
+      $('#pill-connection').textContent = '● Offline build';
+      $('#pill-tables').textContent = 'single file';
+      const list = $('#table-list');
+      if (list) {
+        list.replaceChildren(el('p', { class: 'muted tiny' }, [
+          el('b', { text: 'This is the single-file build. ' }),
+          el('span', {
+            text: 'Practice vs AI works completely offline. For live multiplayer tables, run the full project (npm start) — every other feature is identical.'
+          })
+        ]));
+      }
+      return;
+    }
     if (!this.online) {
       fetch('/api/tables').then((res) => res.json()).then((data) => this.renderTables(data.tables || [])).catch(() => {});
       fetch('/api/leaderboard').then((res) => res.json()).then((data) => this.renderLeaderboard(data.leaderboard || [])).catch(() => {});

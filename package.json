@@ -2,7 +2,7 @@
   "name": "teen-patti-arena",
   "version": "1.0.0",
   "private": true,
-  "description": "Teen Patti (Indian Poker) — real-time multiplayer web game with AI practice mode. Zero runtime dependencies.",
+  "description": "Teen Patti (Indian Poker) \u2014 real-time multiplayer web game with AI practice mode. Zero runtime dependencies.",
   "type": "module",
   "main": "server/index.js",
   "engines": {
@@ -12,7 +12,8 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test \"test/*.test.js\"",
-    "test:engine": "node --test test/evaluator.test.js test/table.test.js test/rooms.test.js test/ws.test.js"
+    "test:engine": "node --test test/evaluator.test.js test/table.test.js test/rooms.test.js test/ws.test.js",
+    "build:standalone": "node tools/build-standalone.mjs"
   },
   "keywords": [
     "teen-patti",

@@ -5,9 +5,19 @@ A complete, playable **Teen Patti (Indian Poker)** web game — real-time multip
 **No runtime dependencies.** The game engine, the WebSocket server, the sound synth and the whole UI are plain JavaScript — the only npm package is `jsdom`, used by the test suite.
 
 ```bash
-npm start        # → http://localhost:4000
-npm test         # engine, server, protocol and browser-side tests
+npm start                     # → http://localhost:4000
+npm test                      # engine, server, protocol and browser-side tests
+npm run build:standalone      # → dist/teen-patti-standalone.html (one file, no server)
 ```
+
+Prefer no terminal at all? Build the **single-file version** and double-click it:
+
+```bash
+npm run build:standalone
+# then open dist/teen-patti-standalone.html in any browser
+```
+
+That one HTML file contains the whole game — rules engine, AI, animations, sounds, styles — with practice mode fully working offline. Only live multiplayer needs the server (as it must).
 
 ---
 
@@ -73,6 +83,8 @@ public/
   js/sound.js        Web Audio sound effects (no audio files)
   js/store.js        profile, settings and lifetime stats in localStorage
   js/ui.js           DOM helpers, cards, toasts, modals
+tools/
+  build-standalone.mjs  bundles everything into one double-clickable .html
 test/                engine, server, protocol, end-to-end and DOM tests
 ```
 
@@ -117,6 +129,7 @@ npm run test:engine
 | `e2e.test.js` | boots the real server, a real WebSocket client joins a table, plays multiple hands, chats and leaves |
 | `ui.test.js` | resolves the browser module graph, then boots the real client modules in jsdom: renders seats/pot/action bar, plays hands through the UI, opens drawers, mounts the app shell |
 | `online-ui.test.js` | the online equivalent: the real app boots in a DOM, connects to a real server over a real WebSocket, sits down, plays a hand, chats and leaves |
+| `standalone.test.js` | builds the single-file version, then loads it in a script-enabled DOM: lobby renders, practice mode deals and a hand completes with zero script errors |
 
 The two DOM suites need the dev dependency (`npm install`) and skip themselves when jsdom is absent, so the runtime stays dependency-free.
 
