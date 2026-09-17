@@ -7,6 +7,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 let JSDOM = null;
 let VirtualConsole = null;
@@ -20,9 +25,14 @@ try {
   build = null;
 }
 
+/** Always build into a temp file: the committed PLAY-ME-first.html stays put. */
+function buildToTemp() {
+  return build({ out: path.join(os.tmpdir(), `teen-patti-standalone-${process.pid}-${Date.now()}.html`) });
+}
+
 test('the standalone build is self-contained (no server URLs left behind)', () => {
   if (!build) return; // jsdom not installed: nothing to check here
-  const result = build();
+  const result = buildToTemp();
   assert.ok(result.bytes > 100_000, 'the bundle is inlined into the file');
   assert.ok(fs.existsSync(result.path), 'the build wrote a file');
 
@@ -37,8 +47,21 @@ test('the standalone build is self-contained (no server URLs left behind)', () =
   fs.rmSync(result.path, { force: true });
 });
 
+test('the shipped PLAY-ME-first.html is present and identical to a fresh build', () => {
+  if (!build) return;
+  const shipped = path.join(root, 'PLAY-ME-first.html');
+  assert.ok(fs.existsSync(shipped), 'PLAY-ME-first.html ships with the project (double-click to play)');
+  const fresh = buildToTemp();
+  assert.equal(
+    fs.readFileSync(shipped, 'utf8'),
+    fresh.html,
+    'PLAY-ME-first.html is stale — run: npm run build:standalone'
+  );
+  fs.rmSync(fresh.path, { force: true });
+});
+
 test('the single file boots, deals and plays a hand with scripts enabled', { skip: !JSDOM, timeout: 120000 }, async (t) => {
-  const result = build();
+  const result = buildToTemp();
   t.after(() => fs.rmSync(result.path, { force: true }));
 
   const problems = [];

@@ -10,14 +10,36 @@ npm test                      # engine, server, protocol and browser-side tests
 npm run build:standalone      # → dist/teen-patti-standalone.html (one file, no server)
 ```
 
-Prefer no terminal at all? Build the **single-file version** and double-click it:
+Prefer no terminal at all? **`PLAY-ME-first.html`** ships with the project — double-click it.
+
+That one HTML file contains the whole game — rules engine, AI, animations, sounds, styles — with practice mode fully working offline. Only live multiplayer needs the server (as it must). Rebuild it any time after editing the source:
 
 ```bash
-npm run build:standalone
-# then open dist/teen-patti-standalone.html in any browser
+npm run build:standalone      # regenerates PLAY-ME-first.html
 ```
 
-That one HTML file contains the whole game — rules engine, AI, animations, sounds, styles — with practice mode fully working offline. Only live multiplayer needs the server (as it must).
+### Launching without the command line
+
+| File | What it does |
+| --- | --- |
+| `PLAY-ME-first.html` | Double-click → offline practice mode in your browser. No Node needed. |
+| `START-WINDOWS.bat` | Double-click → starts the server and opens http://localhost:4000. Falls back to the offline file if Node is missing. |
+| `START-MAC-LINUX.command` | Same for macOS/Linux. |
+
+### Windows troubleshooting
+
+**`npm.ps1 cannot be loaded because running scripts is disabled on this system`**
+PowerShell blocks npm's script shim. Any one of these fixes it — the project itself needs no `npm install`, so the first is easiest:
+
+```powershell
+node server/index.js                     # 1. skip npm entirely (recommended)
+npm.cmd start                            # 2. Call the .cmd shim instead of the .ps1
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # 3. allow local scripts (no admin needed)
+```
+
+Then open <http://localhost:4000>. You can also just double-click `START-WINDOWS.bat`.
+
+**Be careful not to typo the command** — `npm npm startinstall` is not a command; it is `npm start`, or `node server/index.js`.
 
 ---
 

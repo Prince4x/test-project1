@@ -1,6 +1,9 @@
 # dependencies (dev-only: jsdom powers the browser-side tests)
 node_modules/
 
+# build scratch (the shipped single-file build lives at PLAY-ME-first.html)
+dist/
+
 # logs & local state
 *.log
 .DS_Store
