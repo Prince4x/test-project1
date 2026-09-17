@@ -70,6 +70,8 @@ export const DEFAULT_CONFIG = {
   sideShowSeconds: 12,
   /** Allow side shows. */
   sideshow: true,
+  /** Time source: () => ms. Hosts may inject their own (tests, replay). */
+  clock: null,
   /** Minimum raise over the current stake. */
   minRaise: 2,
   /** House cap on the stake (0 = uncapped, chips are the only limit). */
@@ -105,9 +107,15 @@ export function raiseCostFor(stake, seen) {
 export class TeenPattiTable {
   constructor(config = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    /**
+     * Host clock. The engine never calls this.now() directly, so a host — the
+     * server room loop or a test — can drive time itself and get deterministic
+     * timers. Defaults to the real wall clock.
+     */
+    this.clock = this.config.clock || Date.now;
     this.id = config.id || uid('t');
     this.name = config.name || 'Teen Patti Table';
-    this.createdAt = Date.now();
+    this.createdAt = this.now();
 
     /** Fixed-length seat array; null = empty seat. */
     this.seats = new Array(this.config.maxPlayers).fill(null);
@@ -127,10 +135,15 @@ export class TeenPattiTable {
     this.turnDeadline = 0;
     this.sideShowDeadline = 0;
     this.sessionStats = new Map();
-    this.rng = this.config.rng || createRng(this.config.seed || Date.now());
+    this.rng = this.config.rng || createRng(this.config.seed || this.now());
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
+
+  /** Current host time (injectable via config.clock). */
+  now() {
+    return this.clock();
+  }
 
   get players() {
     return this.seats.filter(Boolean);
@@ -172,7 +185,7 @@ export class TeenPattiTable {
       lastAction: null,
       status: 'waiting',
       connected: true,
-      joinedAt: Date.now()
+      joinedAt: this.now()
     };
     this.seats[seat] = player;
     if (!this.sessionStats.has(id)) {
@@ -277,11 +290,11 @@ export class TeenPattiTable {
   }
 
   pushEvent(event) {
-    this.events.push({ ...event, at: Date.now(), handNo: this.handNo });
+    this.events.push({ ...event, at: this.now(), handNo: this.handNo });
   }
 
   pushLog(text) {
-    this.log.push({ text, at: Date.now(), handNo: this.handNo });
+    this.log.push({ text, at: this.now(), handNo: this.handNo });
     if (this.log.length > 120) this.log.splice(0, this.log.length - 120);
   }
 
@@ -363,7 +376,7 @@ export class TeenPattiTable {
   }
 
   startTurnClock() {
-    this.turnStartedAt = Date.now();
+    this.turnStartedAt = this.now();
     const player = this.turnPlayer;
     // A player who lost their connection gets a much shorter clock: their seat
     // still plays out the hand, but nobody waits around for them.
@@ -626,7 +639,7 @@ export class TeenPattiTable {
       requesterSeat: player.seat,
       targetId: target.id,
       targetSeat: target.seat,
-      deadline: Date.now() + this.config.sideShowSeconds * 1000
+      deadline: this.now() + this.config.sideShowSeconds * 1000
     };
     this.sideShowDeadline = this.sideShow.deadline;
     this.pushEvent({ type: 'sideshow:request', ...this.sideShow });
@@ -725,7 +738,7 @@ export class TeenPattiTable {
   }
 
   /** Timer hook — the host owns the clock. */
-  checkTimeout(now = Date.now()) {
+  checkTimeout(now = this.now()) {
     if (this.sideShow && now > this.sideShowDeadline) {
       this.respondSideShow(this.sideShow.targetId, false);
       return { type: 'sideshow:timeout' };
@@ -852,7 +865,7 @@ export class TeenPattiTable {
       packed: this.players
         .filter((player) => player.inHand && player.packed)
         .map((player) => ({ id: player.id, name: player.name, committed: player.committed })),
-      at: Date.now()
+      at: this.now()
     };
 
     for (const player of this.players) {
@@ -875,7 +888,7 @@ export class TeenPattiTable {
       handNo: this.handNo,
       pot: potTotal,
       reason,
-      at: Date.now(),
+      at: this.now(),
       winners: this.results.winners.map((winner) => ({ id: winner.id, name: winner.name, amount: winner.amount })),
       players: this.players
         .filter((player) => player.inHand)

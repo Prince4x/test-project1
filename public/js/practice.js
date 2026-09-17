@@ -46,6 +46,7 @@ export class PracticeController {
     this.table = new TeenPattiTable({
       id: `practice-${Math.random().toString(36).slice(2, 7)}`,
       name: 'Practice table',
+      clock: () => Date.now(),
       boot,
       startChips: Math.max(1000, boot * 100),
       maxBuyIn: Math.max(1000, boot * 100),

@@ -110,7 +110,7 @@ tools/
 test/                engine, server, protocol, end-to-end and DOM tests
 ```
 
-**The engine is host-agnostic.** `TeenPattiTable` is a pure state machine that never touches timers or I/O: it emits events, exposes a `viewerId`-filtered `serialize()` (a client can never see cards it should not), and leaves the clock to its host. The Node server supplies one clock; the browser practice controller supplies another. Both run *the same file*, so practice mode is a faithful rehearsal of the online game.
+**The engine is host-agnostic.** `TeenPattiTable` is a pure state machine that never touches timers or I/O: it emits events, exposes a `viewerId`-filtered `serialize()` (a client can never see cards it should not), and takes its **clock from the host** (`config.clock`, defaulting to `Date.now`) — every deadline, timestamp and timeout is measured on that clock. The Node server passes the room loop's clock, the browser practice controller passes the wall clock, and the tests pass a fake clock they advance by hand, which is what makes timer behaviour deterministic instead of flaky. Both hosts run *the same file*, so practice mode is a faithful rehearsal of the online game.
 
 **Hidden information is enforced server-side.** `serialize(viewerId)` only includes a player's cards once they have *seen* them, and other players' cards only at showdown — a curious client cannot peek.
 
@@ -145,7 +145,7 @@ npm run test:engine
 | Suite | Covers |
 | --- | --- |
 | `evaluator.test.js` | every hand category, tie-breaks, `A-2-3` vs `A-K-Q`, malformed input |
-| `table.test.js` | boot/dealing, dealer rotation, blind vs seen costs, raise bounds, out-of-turn rejection, side pots, turn timeouts, side shows, showdown reveal, sit-out/rebuy, stats, disconnected clock |
+| `table.test.js` | boot/dealing, dealer rotation, blind vs seen costs, raise bounds, out-of-turn rejection, side pots, turn timeouts, side shows, showdown reveal, sit-out/rebuy, stats, disconnected clock, injected-clock timers |
 | `rooms.test.js` | bots play real hands (chips conserved, leaderboard is zero-sum), human join/act/leave, friendly errors, chat sanitising, room cleanup |
 | `ws.test.js` | handshake, masked frames, 126-length payloads, bad upgrade paths |
 | `e2e.test.js` | boots the real server, a real WebSocket client joins a table, plays multiple hands, chats and leaves |

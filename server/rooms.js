@@ -84,6 +84,8 @@ export class RoomManager {
   createRoom({ name, hostId, config = {}, bots = 0, isPublic = true, keepAlive = false } = {}) {
     const table = new TeenPattiTable({
       name: name || 'Teen Patti Table',
+      // one clock for the whole room: turns, side shows, hand history
+      clock: this.now,
       ...config
     });
     const room = {

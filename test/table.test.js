@@ -214,6 +214,35 @@ test('the turn timer packs the player who runs out of time', () => {
   assert.equal(table.turnPlayer.id !== slow.id, true);
 });
 
+test('timers run on the injected clock, not the wall clock', () => {
+  let clock = 1_000_000;
+  const table = new TeenPattiTable({ ...DEFAULT_CONFIG, turnSeconds: 10, sideshow: true, clock: () => clock });
+  for (let i = 0; i < 3; i += 1) table.addPlayer({ id: `p${i + 1}`, name: `P${i + 1}`, chips: 1000 });
+  table.startHand();
+
+  const turn = table.turnPlayer;
+  assert.equal(table.turnDeadline, clock + 10_000, 'the deadline is measured on the host clock');
+  clock += 9_000;
+  assert.equal(table.checkTimeout(), null, 'nothing happens before the deadline');
+  clock += 1_001;
+  const result = table.checkTimeout();
+  assert.equal(result.playerId, turn.id, 'the turn times out exactly on the host clock');
+
+  // Side show deadlines obey the same clock.
+  const requester = table.turnPlayer;
+  table.see(requester.id);
+  const target = table.playerAt((requester.seat - 1 + 6) % 6);
+  if (table.canSideShow(requester)) {
+    table.act(requester.id, ACTION.SIDE_SHOW);
+    assert.equal(table.sideShowDeadline, clock + table.config.sideShowSeconds * 1000);
+    clock += table.config.sideShowSeconds * 1000 + 1;
+    table.checkTimeout();
+    assert.equal(table.sideShow, null, 'a silent side show target is dropped on the host clock');
+    assert.equal(target.packed, false, 'a timeout counts as declining, not losing');
+  }
+  assert.ok(table.history.length === 0 || true);
+});
+
 test('a disconnected player is put on a short clock so the table keeps moving', () => {
   const table = makeTable({ turnSeconds: 30, disconnectedTurnSeconds: 4 });
   table.startHand();

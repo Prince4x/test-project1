@@ -77,7 +77,9 @@ test('a human can join, act and receive state updates', () => {
     clock += 400;
     rooms.tick();
     view = room.table.serialize('human-1');
-    if (view.you?.canAct) {
+    if (view.sideShow?.iAmTarget) {
+      rooms.onMessage(human, { type: 'sideshow', accept: false });
+    } else if (view.you?.canAct) {
       rooms.onMessage(human, { type: 'action', action: 'chaal' });
     }
   }
