@@ -107,7 +107,7 @@ test('the client modules and app shell load in a DOM', { skip: !JSDOM, timeout: 
     const seatUpdates = [];
     const messages = [];
     const store = {
-      settings: { hints: true, sound: false, animations: 'fast', practiceRounds: 2, practiceBoot: 5, practiceTimer: 5, autoRebuy: true },
+      settings: { hints: true, sound: false, ambience: false, volume: 0.8, animations: 'fast', practiceRounds: 2, practiceBoot: 5, practiceTimer: 5, autoRebuy: true },
       profile: { id: 'dom-player', name: 'Dom Tester', avatar: '🧪' },
       recordHand() {}
     };
@@ -176,14 +176,60 @@ test('the client modules and app shell load in a DOM', { skip: !JSDOM, timeout: 
     assert.ok(document.querySelector('#rankings-body').textContent.includes('Trail'), 'rankings reference renders');
     view.destroy();
 
-    // The app shell boots against the lobby markup and fills it in.
+    // The app shell boots against the casino lobby markup and fills it in.
     const { default: AppModule } = await import('../public/js/app.js');
     assert.ok(AppModule || window.app, 'app shell module runs');
     const appInstance = window.app;
     assert.ok(appInstance, 'the app exposes a debug handle');
-    assert.ok(document.querySelector('#rank-chart').children.length >= 6, 'lobby hand-rankings chart is rendered');
-    assert.ok(document.querySelector('#stat-grid').children.length >= 4, 'lobby statistics render');
-    assert.ok(document.querySelector('#profile-chip').textContent.trim().length > 0, 'profile chip renders');
+
+    // ── casino home page ──
+    assert.ok(document.querySelector('.marquee-sign h2').textContent.includes('TEEN PATTI'), 'hero marquee sign renders');
+    assert.equal(document.querySelectorAll('.hero-actions .cta').length, 3, 'three hero play buttons');
+    assert.ok(document.querySelector('#rank-chart').children.length >= 6, 'hand-rankings chart is rendered');
+    assert.ok(document.querySelectorAll('#rank-chart .rank-row .cards-mini').length >= 6, 'rankings show example cards');
+    assert.ok(document.querySelector('#stat-grid').children.length >= 4, 'statistics render as chip tiles');
+    assert.ok(document.querySelector('#ticker-track').childElementCount >= 14, 'the ticker is filled and duplicated for a seamless loop');
+    assert.ok(document.querySelectorAll('.casino-bg .bokeh').length >= 4, 'stage dressing (bokeh) exists');
+    assert.ok(document.querySelector('.player-card .pc-name').textContent.length > 0, 'profile card renders');
+    assert.ok(document.querySelector('#sound-unlock'), 'a sound-unlock prompt exists');
+
+    // leaderboard podium
+    appInstance.renderLeaderboard([
+      { name: 'Ravi', avatar: '🐯', hands: 12, wins: 5, net: 900, biggestPot: 400 },
+      { name: 'Priya', avatar: '🦋', hands: 9, wins: 3, net: -120, biggestPot: 150 }
+    ]);
+    assert.ok(document.querySelector('#leaderboard .board-row.first'), 'the leader gets a podium row');
+    assert.match(document.querySelector('#leaderboard .net.down').textContent, /-/);
+
+    // house tables render as felt table cards with seat dots
+    appInstance.renderTables([
+      { id: 't1', name: 'Friendly Table', players: 3, humans: 1, maxPlayers: 6, boot: 10, pot: 140, handNo: 4, phase: 'betting' }
+    ]);
+    assert.equal(document.querySelectorAll('#table-list .table-card').length, 1, 'table card renders');
+    assert.equal(document.querySelectorAll('#table-list .seat-dot').length, 6, 'seat dots show occupancy');
+    assert.equal(document.querySelectorAll('#table-list .seat-dot.taken').length, 3, 'taken seats are marked');
+
+    // ── sound board ──
+    const { SoundBoard } = await import('../public/js/sound.js');
+    const board = new SoundBoard({ enabled: true, ambience: true, volume: 0.6 });
+    assert.equal(typeof board.unlock, 'function');
+    assert.equal(typeof board.tick, 'function');
+    for (const cue of ['shuffle', 'deal', 'flip', 'chip', 'chipStack', 'call', 'raise', 'check', 'fold', 'allIn',
+      'turn', 'show', 'win', 'lose', 'join', 'warning', 'tick', 'message', 'error', 'reaction', 'click', 'hover']) {
+      assert.equal(typeof board[cue], 'function', `sound cue "${cue}" exists`);
+    }
+    // With no Web Audio available (jsdom), every cue must be a silent no-op.
+    board.unlock();
+    board.win(true);
+    board.setVolume(0.3);
+    board.setEnabled(false);
+    board.startAmbience();
+    board.stopAmbience();
+    assert.equal(board.state.volume, 0.3);
+
+    appInstance.openSettings();
+    assert.ok(document.querySelector('.modal'), 'settings modal opens');
+    assert.ok(document.querySelectorAll('.modal .setting-row').length >= 4, 'settings rows render');
     appInstance.openTutorial();
     assert.ok(document.querySelector('.modal'), 'tutorial modal opens');
     appInstance.view.closeDrawers();

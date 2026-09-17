@@ -28,6 +28,8 @@ class App {
     this.store = new Store();
     this.sound = new SoundBoard({
       enabled: this.store.settings.sound,
+      ambience: this.store.settings.ambience !== false,
+      volume: this.store.settings.volume ?? 0.8,
       speed: SPEED[this.store.settings.animations] || 1
     });
     this.mode = null;                 // 'practice' | 'online'
@@ -53,6 +55,7 @@ class App {
   // ───────────────────────────────────────────────────────────── bootstrap ──
 
   init() {
+    this.disposed = false;
     this.applyTheme(this.store.settings.theme, { silent: true });
     this.applySpeed(this.store.settings.animations);
     this.view.mount();
@@ -71,6 +74,93 @@ class App {
       this.startOnline({ tableId: wanted });
     }
     return this;
+  }
+
+  /**
+   * Browsers only allow audio after a user gesture. The first click, tap or key
+   * press anywhere unlocks the AudioContext and starts the casino ambience; if
+   * the browser still refuses, the lobby shows a "tap to enable sound" hint.
+   */
+  primeAudio() {
+    const onGesture = () => {
+      const ok = this.sound.unlock();
+      if (ok) {
+        this.hideSoundHint();
+        document.removeEventListener('pointerdown', onGesture);
+        document.removeEventListener('keydown', onGesture);
+      } else {
+        this.showSoundHint();
+      }
+    };
+    document.addEventListener('pointerdown', onGesture);
+    document.addEventListener('keydown', onGesture);
+    if (!this.sound.ctx) this.showSoundHint();
+  }
+
+  showSoundHint() {
+    const hint = $('#sound-unlock');
+    if (hint) hint.hidden = !this.store.settings.sound;
+  }
+
+  hideSoundHint() {
+    const hint = $('#sound-unlock');
+    if (hint) hint.hidden = true;
+  }
+
+  /** Buttons, tiles and table cards get a soft tick under the cursor. */
+  wireHoverSounds(root = document) {
+    root.querySelectorAll('.cta, .icon-btn, .chip-btn, .mode-card, .table-card, .btn, #profile-chip .player-card').forEach((node) => {
+      if (node.dataset.soundWired) return;
+      node.dataset.soundWired = '1';
+      node.addEventListener('pointerenter', () => this.sound.hover());
+      node.addEventListener('click', () => {
+        this.sound.unlock();
+        this.sound.click();
+      });
+    });
+  }
+
+  renderTicker(tables = []) {
+    const track = $('#ticker-track');
+    if (!track) return;
+    const boots = tables.map((table) => table.boot).sort((a, b) => a - b);
+    const items = [
+      ['♠', 'Trail beats everything'],
+      ['♥', `Boot from <b>${boots[0] ?? 10}</b> chips`],
+      ['♣', 'Play blind at half price'],
+      ['♦', 'Side show the player on your right'],
+      ['♠', `Biggest pot on the floor <b>${formatChips(this.store.stats.biggestPot)}</b>`],
+      ['♥', 'House tables run 24/7 with AI regulars'],
+      ['♣', 'Play money only — no real wagering']
+    ].map(([suit, text], index) => `<span>${suit} ${text}</span>`).join('');
+    // duplicated for a seamless loop
+    track.replaceChildren();
+    track.insertAdjacentHTML?.('afterbegin', items + items);
+    if (!track.childElementCount) track.innerHTML = items + items;
+  }
+
+  /** Count the hero "biggest pot" up like a slot machine. */
+  animateJackpot(target = this.store.stats.biggestPot) {
+    const node = $('#jackpot-value');
+    if (!node) return;
+    const from = Number(node.dataset.value || 0);
+    const to = Math.max(from, Number(target) || 0);
+    node.dataset.value = String(to);
+    if (to === from) {
+      node.textContent = formatChips(to);
+      return;
+    }
+    const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+    const started = now();
+    const duration = 900;
+    const step = () => {
+      if (!node.isConnected) return;
+      const t = Math.min(1, (now() - started) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      node.textContent = formatChips(Math.round(from + (to - from) * eased));
+      if (t < 1) this.frame(step);
+    };
+    this.frame(step);
   }
 
   bindGlobal() {
@@ -99,8 +189,11 @@ class App {
   }
 
   bindLobby() {
+    $('#sound-unlock').onclick = () => {
+      if (this.sound.unlock()) this.hideSoundHint();
+    };
     $('#btn-sound').onclick = () => {
-      this.sound.resume();
+      this.sound.unlock();
       this.store.setSetting('sound', !this.store.settings.sound);
       this.sound.setEnabled(this.store.settings.sound);
       this.syncTopButtons();
@@ -113,7 +206,7 @@ class App {
     $('#btn-settings').onclick = () => this.openSettings();
     $('#btn-help').onclick = () => this.openTutorial();
     $('#btn-practice').onclick = () => {
-      this.sound.resume();
+      this.sound.unlock();
       this.startPractice();
     };
     $('#btn-online').onclick = () => this.startOnline({});
@@ -133,12 +226,14 @@ class App {
     };
     $('#profile-chip').onclick = () => this.openProfileEditor();
     this.syncTopButtons();
+    this.wireHoverSounds();
+    this.animateJackpot();
     if (STANDALONE) {
-      $('#hero-title').textContent = 'Your offline Teen Patti table';
-      $('#hero-copy').textContent = 'This single-file build runs straight from your disk — no server, no internet. Press “Practice vs AI” to deal. Everything else (rules, AI, stats, sounds) is identical to the online game.';
-      $('#btn-online').querySelector('span span').textContent = 'Needs the full project — run "npm start" for live tables.';
-      $('#btn-online').disabled = true;
-      $('#btn-online').title = 'Multiplayer needs the Node server from the full project';
+      const online = $('#btn-online');
+      online.querySelector('small').textContent = 'needs the full project (npm start)';
+      online.disabled = true;
+      online.title = 'Multiplayer needs the Node server from the full project';
+      this.renderTicker([]);
     }
   }
 
@@ -160,12 +255,17 @@ class App {
 
   renderProfileChip() {
     const { name, avatar } = this.store.profile;
+    const chipBalance = $('#pill-jackpot') ? null : null;
     $('#profile-chip').replaceChildren(
-      el('span', { class: 'pill', style: { cursor: 'pointer' } }, [
-        el('span', { text: avatar, style: { fontSize: '16px' } }),
-        el('span', { text: name })
+      el('div', { class: 'player-card', title: 'Edit your name and avatar' }, [
+        el('span', { class: 'pc-avatar', text: avatar }),
+        el('div', {}, [
+          el('b', { class: 'pc-name', text: name }),
+          el('div', { class: 'pc-sub', text: `${this.store.stats.hands} hands · ${this.store.winRate}% wins` })
+        ])
       ])
     );
+    void chipBalance;
   }
 
   renderStats() {
@@ -180,6 +280,8 @@ class App {
     $('#pill-best-hand').textContent = stats.bestHand
       ? `Best hand: ${stats.bestHand.name}`
       : 'Best hand: —';
+    this.animateJackpot(stats.biggestPot);
+    this.renderTicker(this.lastTables || []);
   }
 
   renderRankChart(highlightCategory = null) {
@@ -200,54 +302,78 @@ class App {
         el('b', { text: entry.name }),
         el('div', { class: 'tiny muted', text: CATEGORY_LABEL[entry.category] })
       ]),
-      cardRow(examples[entry.category] || [], { size: 'sm' })
+      (() => {
+        const row = cardRow(examples[entry.category] || [], { size: 'sm' });
+        row.classList.add('cards-mini');
+        return row;
+      })()
     ])));
   }
 
   renderLeaderboard(entries) {
     const host = $('#leaderboard');
     if (!entries?.length) {
-      host.replaceChildren(el('p', { class: 'muted tiny', text: this.mode === 'online' ? 'No hands played on the server yet.' : 'Connect to a live table to build the leaderboard.' }));
+      host.replaceChildren(el('p', {
+        class: 'muted tiny',
+        text: this.mode === 'online' ? 'No hands played on the server yet.' : 'Connect to a live table to build the leaderboard.'
+      }));
       return;
     }
-    host.replaceChildren(...entries.map((entry, index) => el('div', { class: 'board-row' }, [
-      el('span', { class: 'place', text: `#${index + 1}` }),
-      el('span', {}, [
+    const medals = ['🥇', '🥈', '🥉'];
+    host.replaceChildren(...entries.map((entry, index) => el('div', {
+      class: `board-row ${index === 0 ? 'first' : index === 1 ? 'second' : index === 2 ? 'third' : ''}`
+    }, [
+      el('span', { class: 'place', text: medals[index] || `#${index + 1}` }),
+      el('span', { class: 'who' }, [
         el('b', { text: `${entry.avatar || '🙂'} ${entry.name}` }),
-        el('span', { class: 'tiny muted', text: ` · ${entry.hands} hands · ${entry.wins} wins` })
+        el('div', { text: `${entry.hands} hands · ${entry.wins} wins · best pot ${formatChips(entry.biggestPot || 0)}` })
       ]),
-      el('span', { class: entry.net >= 0 ? 'pill green' : 'pill red', text: formatSigned(entry.net) })
+      el('span', { class: `net ${entry.net >= 0 ? 'up' : 'down'}`, text: formatSigned(entry.net) })
     ])));
   }
 
   renderTables(tables = []) {
     const host = $('#table-list');
-    $('#pill-tables').textContent = `${tables.length} table${tables.length === 1 ? '' : 's'}`;
+    const pill = $('#pill-tables');
+    this.lastTables = tables;
+    if (pill) pill.textContent = `${tables.length} table${tables.length === 1 ? '' : 's'} on the floor`;
+    this.renderTicker(tables);
+
     if (!tables.length) {
       host.replaceChildren(el('p', { class: 'muted tiny', text: 'No live tables right now — create one and invite a friend.' }));
       return;
     }
+
     host.replaceChildren(...tables.map((table) => {
-      const row = el('div', { class: 'table-row' }, [
-        el('div', { class: 'name' }, [
+      const dots = el('span', { class: 'seat-dots' }, Array.from({ length: table.maxPlayers }, (unused, index) => el('span', {
+        class: `seat-dot ${index < table.players ? 'taken' : ''}`
+      })));
+
+      const card = el('div', { class: 'table-card' }, [
+        el('div', { class: 'tc-name' }, [
           el('span', { text: '🎴' }),
-          el('span', { text: table.name }),
-          table.phase === 'betting' ? el('span', { class: 'pill green', text: 'in play' }) : el('span', { class: 'pill', text: 'waiting' })
+          el('span', { text: table.name })
         ]),
         el('button', {
-          class: 'btn small primary',
+          class: 'tc-join',
           text: 'Sit down',
           onclick: () => this.startOnline({ tableId: table.id, buyIn: table.boot * 50 })
         }),
-        el('div', { class: 'meta' }, [
-          el('span', { class: 'pill', text: `👤 ${table.players}/${table.maxPlayers}` }),
-          el('span', { class: 'pill gold', text: `boot ${formatChips(table.boot)}` }),
-          el('span', { class: 'pill', text: `pot ${formatChips(table.pot)}` }),
-          el('span', { class: 'pill blue', text: `hand #${table.handNo}` })
+        el('div', { class: 'tc-meta' }, [
+          el('span', { class: 'badge gold', text: `boot ${formatChips(table.boot)}` }),
+          el('span', { class: 'badge', text: `pot ${formatChips(table.pot)}` }),
+          el('span', { class: 'badge', text: `hand #${table.handNo}` }),
+          table.phase === 'betting'
+            ? el('span', { class: 'badge live', text: '● in play' })
+            : el('span', { class: 'badge', text: 'waiting' }),
+          table.humans === 0 ? el('span', { class: 'badge bot', text: 'AI table' }) : null,
+          dots,
+          el('span', { class: 'tc-boot', text: `${table.players}/${table.maxPlayers} seated` })
         ])
       ]);
-      return row;
+      return card;
     }));
+    this.wireHoverSounds(host);
   }
 
   // ─────────────────────────────────────────────────────────────── practice ──
@@ -320,7 +446,7 @@ class App {
     }
     this.teardown();
     this.mode = 'online';
-    this.sound.resume();
+    this.sound.unlock();
     let joinRequested = false;
 
     this.online = new OnlineController({
@@ -354,6 +480,8 @@ class App {
       onState: (snapshot, events, table) => this.view.render(snapshot, table),
       onEvent: (events) => this.view.handleEvents(events),
       onJoined: (message) => {
+        this.sound.unlock();
+        this.sound.join();
         if (!tableId) return;
         const info = message.table;
         this.view.pushChat({
@@ -433,6 +561,28 @@ class App {
     });
   }
 
+  /** True while the app's DOM is still attached (false after teardown/close). */
+  get alive() {
+    return !this.disposed;
+  }
+
+  /**
+   * requestAnimationFrame that is safe everywhere: falls back to a timeout and
+   * never runs after teardown (the DOM may be gone by then).
+   */
+  frame(callback) {
+    if (!this.alive) return;
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, 16);
+    schedule(() => {
+      if (!this.alive) return;
+      try {
+        callback();
+      } catch { /* never let an animation break the game */ }
+    });
+  }
+
   refreshTables() {
     if (STANDALONE) {
       $('#pill-connection').textContent = '● Offline build';
@@ -449,8 +599,14 @@ class App {
       return;
     }
     if (!this.online) {
-      fetch('/api/tables').then((res) => res.json()).then((data) => this.renderTables(data.tables || [])).catch(() => {});
-      fetch('/api/leaderboard').then((res) => res.json()).then((data) => this.renderLeaderboard(data.leaderboard || [])).catch(() => {});
+      fetch('/api/tables')
+        .then((res) => res.json())
+        .then((data) => { if (this.alive) this.renderTables(data.tables || []); })
+        .catch(() => {});
+      fetch('/api/leaderboard')
+        .then((res) => res.json())
+        .then((data) => { if (this.alive) this.renderLeaderboard(data.leaderboard || []); })
+        .catch(() => {});
       return;
     }
     this.online.requestTables();
@@ -479,6 +635,9 @@ class App {
   }
 
   teardown() {
+    this.disposed = true;
+    this.animating = false;
+    this.sound.stopPending();
     this.controller?.stop?.();
     this.controller = null;
     if (this.online) {
@@ -614,11 +773,37 @@ class App {
       }
     })));
 
+    const volumeSlider = el('input', {
+      type: 'range',
+      min: '0',
+      max: '100',
+      value: String(Math.round((s.volume ?? 0.8) * 100)),
+      style: { width: '130px' },
+      oninput: (event) => {
+        const value = Number(event.target.value) / 100;
+        this.store.setSetting('volume', value);
+        this.sound.setVolume(value);
+      },
+      onchange: () => this.sound.chipStack(2)
+    });
+
     const body = [
       toggleRow('Sound effects', 'Card deals, chips, wins and losses', 'sound', (value) => {
         this.sound.setEnabled(value);
         this.syncTopButtons();
+        if (value) this.sound.unlock();
+        else this.hideSoundHint();
       }),
+      toggleRow('Casino ambience', 'Quiet room tone and distant chip clinks', 'ambience', (value) => {
+        this.sound.setAmbience(value);
+      }),
+      el('div', { class: 'setting-row' }, [
+        el('div', { class: 'label' }, [el('b', { text: 'Volume' }), el('span', { text: this.sound.state.available ? 'Drag to taste' : 'Tap the page once to enable audio' })]),
+        el('div', { class: 'row' }, [
+          volumeSlider,
+          el('button', { class: 'btn small', text: '🔔 Test', onclick: () => { this.sound.unlock(); this.sound.win(); } })
+        ])
+      ]),
       toggleRow('Strategy hints', 'Show hand strength advice under your cards', 'hints'),
       toggleRow('Auto top-up (practice)', 'Bots and you refill when a stack busts', 'autoRebuy'),
       el('div', { class: 'setting-row' }, [

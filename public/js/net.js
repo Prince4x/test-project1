@@ -38,15 +38,20 @@ export class OnlineController {
   get isOnline() { return true; }
 
   get url() {
-    const { protocol, host } = window.location;
+    const { protocol, host } = (typeof window !== 'undefined' ? window : {}).location || { protocol: 'http:', host: 'localhost' };
     return `${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}/ws?profile=${encodeURIComponent(this.profile.id)}`;
   }
 
   connect() {
     this.intentionalClose = false;
     this.onStatus({ state: this.connected ? 'connected' : 'connecting' });
+    const Socket = typeof window !== 'undefined' ? window.WebSocket : null;
+    if (!Socket) {
+      this.onError('WebSockets are not available in this environment');
+      return;
+    }
     try {
-      this.socket = new window.WebSocket(this.url);
+      this.socket = new Socket(this.url);
     } catch (error) {
       this.onError(`Cannot reach the game server: ${error.message}`);
       this.scheduleReconnect();
@@ -97,7 +102,8 @@ export class OnlineController {
   }
 
   send(message) {
-    if (this.socket?.readyState === window.WebSocket.OPEN) {
+    const Socket = typeof window !== 'undefined' ? window.WebSocket : null;
+    if (Socket && this.socket?.readyState === Socket.OPEN) {
       this.socket.send(JSON.stringify(message));
       return true;
     }

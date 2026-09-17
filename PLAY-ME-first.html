@@ -707,71 +707,492 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
+/* ============================================================
+   CASINO HOME PAGE
+   Marquee signage, spotlights, bokeh, velvet and gold trim.
+   Light theme ("daylight room") keeps the same structure.
+   ============================================================ */
+
+:root {
+  --velvet: #4a0d18;
+  --velvet-2: #2b060d;
+  --neon: #ffd166;
+  --neon-2: #ff8f5e;
+  --felt-card: linear-gradient(165deg, #0f6b4f, #07402f 60%, #052a20);
+}
+
+/* ── stage dressing ─────────────────────────────────────────── */
+
+#lobby { position: relative; overflow-y: auto; background: radial-gradient(1200px 800px at 50% -10%, #171f28, var(--bg-0) 60%); }
+.casino-bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.casino-bg .velvet-top {
+  position: absolute; inset: 0 0 auto 0; height: 46vh;
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(74, 13, 24, 0.85), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.35) 0 14px, rgba(255,255,255,0.03) 14px 28px);
+  mask-image: linear-gradient(180deg, #000 30%, transparent 100%);
+}
+.casino-bg .spotlight {
+  position: absolute; top: -30vh; width: 46vw; height: 130vh;
+  background: radial-gradient(closest-side, rgba(255, 214, 130, 0.16), transparent 70%);
+  filter: blur(20px); mix-blend-mode: screen;
+  animation: sweep 14s ease-in-out infinite alternate;
+}
+.casino-bg .spotlight.s1 { left: -6vw; transform: rotate(12deg); }
+.casino-bg .spotlight.s2 { right: -6vw; transform: rotate(-12deg); animation-delay: -6s; }
+@keyframes sweep { from { opacity: 0.55; } to { opacity: 0.95; } }
+.casino-bg .bokeh {
+  position: absolute; width: 90px; height: 90px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 209, 102, 0.5), transparent 70%);
+  filter: blur(6px); opacity: 0.35;
+  animation: floaty 18s ease-in-out infinite;
+}
+.casino-bg .b1 { left: 8%; top: 18%; animation-delay: -2s; }
+.casino-bg .b2 { left: 26%; top: 62%; width: 56px; height: 56px; animation-delay: -7s; }
+.casino-bg .b3 { left: 52%; top: 12%; width: 130px; height: 130px; opacity: 0.22; }
+.casino-bg .b4 { right: 12%; top: 30%; width: 70px; height: 70px; animation-delay: -4s; }
+.casino-bg .b5 { right: 28%; top: 70%; width: 100px; height: 100px; animation-delay: -11s; opacity: 0.25; }
+.casino-bg .b6 { left: 42%; top: 78%; width: 44px; height: 44px; animation-delay: -9s; }
+@keyframes floaty { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-26px) } }
+.casino-bg .casino-vignette { position: absolute; inset: 0; background: radial-gradient(120% 70% at 50% 40%, transparent 40%, rgba(0,0,0,0.55)); }
+body[data-theme='light'] .casino-bg .bokeh { opacity: 0.18; }
+body[data-theme='light'] .casino-bg .velvet-top { opacity: 0.25; }
+body[data-theme='light'] #lobby { background: radial-gradient(1200px 800px at 50% -10%, #ffffff, var(--bg-0) 65%); }
+
+/* ── top bar ────────────────────────────────────────────────── */
+
+.casino-top {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 22px;
+  background: linear-gradient(180deg, rgba(8, 11, 16, 0.92), rgba(8, 11, 16, 0.35));
+  border-bottom: 1px solid rgba(245, 196, 81, 0.22);
+  backdrop-filter: blur(12px);
+}
+body[data-theme='light'] .casino-top { background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.5)); }
+.casino-top .brand { display: flex; align-items: center; gap: 13px; }
+.casino-top .logo {
+  width: 46px; height: 46px; display: grid; place-items: center; font-size: 24px;
+  border-radius: 14px; color: #241704;
+  background: linear-gradient(150deg, #ffe9a8, var(--gold) 45%, var(--gold-deep));
+  box-shadow: 0 10px 26px rgba(245, 196, 81, 0.32), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.brand-text h1 { font-size: 20px; line-height: 1.05; letter-spacing: -0.02em; }
+.brand-text h1 em {
+  font-style: normal;
+  background: linear-gradient(180deg, #fff3c4, var(--gold) 60%, #a9760a);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.brand-text p { margin: 2px 0 0; font-size: 11.5px; color: var(--text-faint); letter-spacing: 0.02em; }
+.top-bar-actions { display: flex; gap: 8px; }
+.icon-btn {
+  width: 40px; height: 40px; display: grid; place-items: center; font-size: 17px;
+  border-radius: 12px; border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05); color: var(--text);
+  transition: transform 0.15s, background 0.2s, border-color 0.2s;
+}
+.icon-btn:hover { background: var(--gold-soft); border-color: rgba(245, 196, 81, 0.45); transform: translateY(-1px); }
+
+#profile-chip .player-card {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  padding: 6px 12px 6px 7px; border-radius: 999px;
+  border: 1px solid rgba(245, 196, 81, 0.3);
+  background: linear-gradient(120deg, rgba(245,196,81,0.14), rgba(255,255,255,0.03));
+}
+#profile-chip .player-card:hover { border-color: var(--gold); }
+#profile-chip .pc-avatar { font-size: 19px; }
+#profile-chip .pc-name { font-size: 13.5px; font-weight: 700; }
+#profile-chip .pc-sub { font-size: 11px; color: var(--text-faint); }
+
+.sound-unlock {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 70;
+  padding: 11px 18px; border-radius: 999px;
+  border: 1px solid rgba(245, 196, 81, 0.5);
+  background: rgba(8, 11, 16, 0.92); color: var(--gold);
+  font-weight: 650; font-size: 13.5px; box-shadow: var(--shadow-lg);
+  animation: toastIn 0.3s ease;
+}
+.sound-unlock:hover { background: var(--gold-soft); }
+
+/* ── body layout ────────────────────────────────────────────── */
+
+.casino-body { position: relative; z-index: 1; max-width: 1300px; margin: 0 auto; padding: 22px 22px 40px; }
+
+/* ── hero ───────────────────────────────────────────────────── */
+
+.hero {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+  gap: 24px; align-items: center;
+  padding: 30px 30px 26px; margin-bottom: 16px;
+  border-radius: 24px;
+  border: 1px solid rgba(245, 196, 81, 0.28);
+  background:
+    radial-gradient(120% 120% at 12% 0%, rgba(142, 26, 40, 0.55), transparent 55%),
+    linear-gradient(180deg, rgba(12, 17, 23, 0.9), rgba(8, 11, 16, 0.96));
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+body[data-theme='light'] .hero { background: radial-gradient(120% 120% at 12% 0%, rgba(142, 26, 40, 0.14), transparent 55%), linear-gradient(180deg, #fff, #f4f7fb); }
+.hero::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 100% at 50% 0%, rgba(255, 209, 102, 0.14), transparent 70%);
+}
+.hero-glow {
+  position: absolute; width: 520px; height: 520px; left: -120px; top: -260px;
+  background: radial-gradient(closest-side, rgba(255, 209, 102, 0.22), transparent 70%);
+  filter: blur(10px); pointer-events: none;
+}
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; text-align: center; } .hero-art { display: none; } }
+
+.marquee-sign { display: inline-flex; align-items: center; gap: 12px; }
+.marquee-sign h2 {
+  font-size: clamp(30px, 5.4vw, 54px); letter-spacing: 0.06em; line-height: 1;
+  background: linear-gradient(180deg, #fff6d5, var(--neon) 45%, #b96b12);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: 0 0 34px rgba(255, 180, 80, 0.35);
+}
+.bulbs {
+  flex: 1 1 auto; min-width: 40px; height: 10px;
+  background-image: radial-gradient(circle, var(--neon) 0 2.4px, transparent 2.6px);
+  background-size: 14px 10px; background-repeat: repeat-x;
+  opacity: 0.9; animation: bulbs 1.6s steps(2, end) infinite;
+}
+@keyframes bulbs { 0%, 100% { opacity: 0.9 } 50% { opacity: 0.35 } }
+.hero-tag { margin: 12px 0 18px; color: var(--text-dim); font-size: 15px; max-width: 52ch; }
+@media (max-width: 900px) { .hero-tag { margin-inline: auto; } }
+
+.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 900px) { .hero-actions { justify-content: center; } }
+
+.cta {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 13px 20px; border-radius: 16px; text-align: left;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03));
+  color: var(--text); font-weight: 700;
+  transition: transform 0.16s, box-shadow 0.22s, border-color 0.22s, background 0.22s;
+}
+.cta small { display: block; font-size: 11px; font-weight: 600; color: var(--text-faint); letter-spacing: 0.02em; }
+.cta .cta-icon { font-size: 22px; }
+.cta:hover:not(:disabled) { transform: translateY(-2px); border-color: rgba(245, 196, 81, 0.55); box-shadow: 0 14px 30px rgba(0,0,0,0.35); }
+.cta.primary {
+  background: linear-gradient(180deg, #ffe6a1, var(--gold) 55%, var(--gold-deep));
+  color: #241704; border-color: rgba(255,255,255,0.4);
+  box-shadow: 0 14px 32px rgba(245, 196, 81, 0.3);
+}
+.cta.primary small { color: rgba(36, 23, 4, 0.72); }
+.cta.primary:hover { box-shadow: 0 18px 40px rgba(245, 196, 81, 0.45); }
+.cta.ghost { background: transparent; }
+.cta.small { width: 100%; padding: 11px 14px; justify-content: center; font-size: 13.5px; }
+.cta.small .cta-icon { font-size: 17px; }
+.cta:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.hero-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+@media (max-width: 900px) { .hero-pills { justify-content: center; } }
+.mini-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 650;
+  color: var(--text-dim); border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+}
+.mini-pill.gold { color: var(--gold); border-color: rgba(245,196,81,0.4); background: var(--gold-soft); }
+.mini-pill b { color: var(--gold); font-variant-numeric: tabular-nums; }
+
+/* hero artwork */
+.hero-art { position: relative; height: 240px; }
+.chip-stack-art { position: absolute; right: 22px; bottom: 26px; }
+.art-chip {
+  position: absolute; width: 84px; height: 84px; border-radius: 50%;
+  border: 5px dashed rgba(255,255,255,0.85);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.45), inset 0 0 0 3px rgba(0,0,0,0.15);
+}
+.art-chip.c5 { background: radial-gradient(circle at 34% 28%, #ffb0b0, #b3261e); right: 0; bottom: 0; }
+.art-chip.c10 { background: radial-gradient(circle at 34% 28%, #a9dcff, #1565c0); right: 16px; bottom: 26px; }
+.art-chip.c50 { background: radial-gradient(circle at 34% 28%, #bdf7cf, #1b7a44); right: 32px; bottom: 52px; }
+.art-chip.c100 { background: radial-gradient(circle at 34% 28%, #3a3a3a, #050505); right: 48px; bottom: 78px; }
+.art-chip.c500 { background: radial-gradient(circle at 34% 28%, #e0c7ff, #5e35b1); right: 64px; bottom: 104px; }
+.card-fan { position: absolute; left: 6px; top: 16px; }
+.fan-card {
+  position: absolute; width: 84px; height: 122px; border-radius: 12px;
+  background: linear-gradient(160deg, #fff, #e7ecf3);
+  box-shadow: 0 16px 30px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #16202b; font-weight: 800;
+  animation: fanFloat 6s ease-in-out infinite;
+}
+.fan-card b { font-size: 34px; line-height: 1; }
+.fan-card i { font-style: normal; font-size: 26px; }
+.fan-card.f1 { transform: rotate(-16deg) translate(-26px, 6px); color: #16202b; }
+.fan-card.f2 { transform: rotate(-2deg) translate(34px, -6px); color: #c62828; animation-delay: -1.6s; }
+.fan-card.f3 { transform: rotate(14deg) translate(96px, 10px); color: #c62828; animation-delay: -3.2s; }
+@keyframes fanFloat { 0%, 100% { margin-top: 0 } 50% { margin-top: -14px } }
+.hero-badge {
+  position: absolute; inset: auto 0 6px 0; text-align: center;
+  color: rgba(255,255,255,0.16); font-size: 30px; letter-spacing: 0.5em;
+}
+
+/* ── ticker ─────────────────────────────────────────────────── */
+
+.ticker {
+  position: relative; overflow: hidden; margin-bottom: 16px;
+  border-block: 1px solid rgba(245, 196, 81, 0.22);
+  background: linear-gradient(90deg, rgba(245,196,81,0.07), rgba(255,255,255,0.02), rgba(245,196,81,0.07));
+}
+.ticker-track {
+  display: inline-flex; gap: 42px; white-space: nowrap; padding: 9px 0;
+  font-size: 12.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint);
+  animation: ticker 34s linear infinite;
+}
+.ticker-track b { color: var(--gold); }
+@keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+
+/* ── panels ─────────────────────────────────────────────────── */
+
+.casino-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: minmax(320px, 1.25fr) minmax(300px, 1fr) minmax(280px, 0.95fr);
+  align-items: start;
+}
+@media (max-width: 1080px) { .casino-grid { grid-template-columns: 1fr 1fr; } .rankings-panel { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .casino-grid { grid-template-columns: 1fr; } }
+
+.panel {
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(21, 30, 39, 0.92), rgba(14, 20, 27, 0.94));
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+body[data-theme='light'] .panel { background: linear-gradient(180deg, #fff, #f6f8fb); }
+.panel::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 2px; border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, transparent, rgba(245,196,81,0.55), transparent);
+}
+.panel > header { display: flex; align-items: center; gap: 10px; }
+.panel > header h3 { font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; }
+.panel-icon { font-size: 18px; }
+.chip-btn {
+  min-width: 34px; height: 32px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: var(--text-dim);
+  font-weight: 700; transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.chip-btn:hover { background: var(--gold-soft); color: var(--gold); border-color: rgba(245,196,81,0.4); }
+.chip-btn.wide { width: 100%; }
+
+/* table cards rendered by the client */
+.table-list { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; padding-right: 2px; }
+.table-card {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center;
+  padding: 14px 14px 12px; border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--felt-card);
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.35), 0 10px 24px rgba(0,0,0,0.3);
+  position: relative; overflow: hidden;
+  transition: transform 0.16s, border-color 0.2s, box-shadow 0.2s;
+}
+.table-card::before {
+  content: ''; position: absolute; inset: 8px; border-radius: 12px;
+  border: 1px dashed rgba(255,255,255,0.12); pointer-events: none;
+}
+.table-card:hover { transform: translateY(-2px); border-color: rgba(245,196,81,0.55); box-shadow: 0 16px 34px rgba(0,0,0,0.45); }
+.table-card .tc-name { font-weight: 750; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+.table-card .tc-boot { font-size: 12px; color: rgba(255,255,255,0.72); }
+.table-card .tc-meta { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.table-card .seat-dots { display: inline-flex; gap: 4px; }
+.table-card .seat-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.35); }
+.table-card .seat-dot.taken { background: linear-gradient(180deg, #ffe6a1, var(--gold)); border-color: rgba(255,255,255,0.6); }
+.table-card .seat-dot.bot { background: linear-gradient(180deg, #bcd8ff, #4c8fd6); }
+.table-card .tc-join {
+  padding: 8px 16px; border-radius: 11px; font-weight: 750; font-size: 13px;
+  border: 1px solid rgba(255,255,255,0.4); color: #241704;
+  background: linear-gradient(180deg, #ffe6a1, var(--gold) 60%, var(--gold-deep));
+}
+.table-card .tc-join:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.badge {
+  font-size: 10.5px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.08); color: var(--text-dim);
+}
+.badge.live { color: var(--green); border-color: rgba(55,211,153,0.45); background: rgba(55,211,153,0.12); }
+.badge.gold { color: var(--gold); border-color: rgba(245,196,81,0.45); background: var(--gold-soft); }
+.badge.bot { color: var(--blue); border-color: rgba(88,166,255,0.4); background: rgba(88,166,255,0.12); }
+
+/* stats as casino chips */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat {
+  position: relative; padding: 13px 13px 11px; border-radius: 14px;
+  border: 1px dashed rgba(255,255,255,0.16);
+  background: radial-gradient(120% 120% at 20% 0%, rgba(245,196,81,0.14), rgba(255,255,255,0.03));
+}
+.stat::after {
+  content: ''; position: absolute; inset: 5px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06); pointer-events: none;
+}
+.stat b { display: block; font-size: 22px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.07em; }
+.stat.pos b { color: var(--green); }
+.stat.neg b { color: var(--red); }
+
+/* leaderboard podium */
+.board { display: flex; flex-direction: column; gap: 8px; }
+.board-row {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center;
+  padding: 9px 11px; border-radius: 12px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+}
+.board-row .place { font-size: 17px; text-align: center; }
+.board-row.first { border-color: rgba(245,196,81,0.6); background: var(--gold-soft); }
+.board-row.second { border-color: rgba(190, 205, 220, 0.45); }
+.board-row.third { border-color: rgba(205, 150, 90, 0.45); }
+.board-row .who b { font-size: 13.5px; }
+.board-row .who div { font-size: 11.5px; color: var(--text-faint); }
+.board-row .net { font-weight: 750; font-variant-numeric: tabular-nums; }
+.board-row .net.up { color: var(--green); }
+.board-row .net.down { color: var(--red); }
+
+/* rankings strip */
+.rank-chart { display: flex; flex-direction: column; gap: 7px; }
+.rank-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: 12px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  border: 1px solid transparent;
+}
+.rank-row .idx {
+  width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 50%;
+  background: linear-gradient(180deg, #ffe6a1, var(--gold-deep)); color: #241704;
+  font-size: 11.5px; font-weight: 800; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+}
+.rank-row b { font-size: 13.5px; }
+.rank-row .tiny { margin-top: 1px; }
+.rank-row .cards-mini { margin-left: auto; display: flex; gap: 3px; }
+.rank-row.highlight { border-color: rgba(245,196,81,0.45); background: var(--gold-soft); }
+
+.practice-options summary {
+  cursor: pointer; color: var(--text-dim); font-size: 12.5px;
+  padding: 8px 0 4px; border-top: 1px dashed var(--border);
+}
+.practice-options summary:hover { color: var(--gold); }
+
+.casino-foot {
+  margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border);
+  display: flex; gap: 8px; justify-content: center; align-items: center;
+  color: var(--text-faint); font-size: 12px;
+}
+.casino-foot .dot { opacity: 0.5; }
+
+@media (max-width: 560px) {
+  .casino-body { padding: 16px 14px 32px; }
+  .casino-top { padding: 10px 14px; gap: 10px; }
+  .brand-text p { display: none; }
+  .icon-btn { width: 36px; height: 36px; font-size: 15px; }
+  .hero { padding: 20px 18px; }
+  .ticker-track { font-size: 11px; gap: 26px; }
+}
+
 </style>
 </head>
 <body data-theme="dark">
 
-<!-- ══════════════════════════════════ LOBBY ══════════════════════════════════ -->
+<!-- ══════════════════════════════ CASINO LOBBY ══════════════════════════════ -->
 <section id="lobby" class="screen active">
-  <header class="lobby-top">
+
+  <!-- stage dressing: spotlights, bokeh, velvet -->
+  <div class="casino-bg" aria-hidden="true">
+    <div class="spotlight s1"></div>
+    <div class="spotlight s2"></div>
+    <div class="bokeh b1"></div><div class="bokeh b2"></div><div class="bokeh b3"></div>
+    <div class="bokeh b4"></div><div class="bokeh b5"></div><div class="bokeh b6"></div>
+    <div class="velvet-top"></div>
+    <div class="casino-vignette"></div>
+  </div>
+
+  <header class="casino-top">
     <div class="brand">
-      <div class="logo">🎴</div>
-      <div>
-        <h1>Teen Patti <span>Arena</span></h1>
-        <p>Indian Poker · Trail beats everything</p>
+      <div class="logo"><span>♠</span></div>
+      <div class="brand-text">
+        <h1>Teen Patti <em>Arena</em></h1>
+        <p>Indian Poker · 3 cards · Trail beats everything</p>
       </div>
     </div>
     <div class="spacer"></div>
-    <div class="row" id="profile-chip"></div>
-    <button class="btn icon" id="btn-sound" title="Sound on/off">🔊</button>
-    <button class="btn icon" id="btn-theme" title="Light / dark felt">🌙</button>
-    <button class="btn icon" id="btn-settings" title="Settings">⚙️</button>
-    <button class="btn icon" id="btn-help" title="How to play">❓</button>
+    <div id="profile-chip"></div>
+    <div class="top-bar-actions">
+      <button class="icon-btn" id="btn-sound" title="Sound effects on/off"><span>🔊</span></button>
+      <button class="icon-btn" id="btn-theme" title="Light / dark room"><span>🌙</span></button>
+      <button class="icon-btn" id="btn-settings" title="Settings"><span>⚙️</span></button>
+      <button class="icon-btn" id="btn-help" title="How to play"><span>❓</span></button>
+    </div>
   </header>
 
-  <div class="lobby-body">
-    <section class="lobby-hero card-panel">
+  <!-- sound needs one tap: this notice disappears once audio is running -->
+  <button class="sound-unlock" id="sound-unlock" hidden>🔈 Tap anywhere to switch the sound on</button>
+
+  <div class="casino-body">
+
+    <!-- ── hero: the big neon sign ─────────────────────────────── -->
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
       <div class="hero-copy">
-        <h2 id="hero-title">Welcome to the table</h2>
-        <p id="hero-copy">Choose a mode below — practise against four AI personalities, or sit down at a live table and see how far your chips travel.</p>
+        <div class="marquee-sign">
+          <span class="bulbs" aria-hidden="true"></span>
+          <h2>TEEN PATTI</h2>
+          <span class="bulbs" aria-hidden="true"></span>
+        </div>
+        <p class="hero-tag">Deal three cards. Play blind or look. Bluff your way to the pot.</p>
+        <div class="hero-actions">
+          <button class="cta primary" id="btn-practice"><span class="cta-icon">🤖</span><span>Play vs AI<small>instant · offline</small></span></button>
+          <button class="cta" id="btn-online"><span class="cta-icon">🌐</span><span>Live tables<small>real multiplayer</small></span></button>
+          <button class="cta ghost" id="btn-tutorial"><span class="cta-icon">🎓</span><span>How to play<small>2 minute tutorial</small></span></button>
+        </div>
+        <div class="hero-pills">
+          <span class="mini-pill gold" id="pill-connection">● Offline</span>
+          <span class="mini-pill" id="pill-tables">0 tables</span>
+          <span class="mini-pill" id="pill-jackpot">🏆 Biggest pot <b id="jackpot-value">0</b></span>
+        </div>
       </div>
-      <div class="spacer"></div>
-      <div class="row wrap">
-        <span class="pill gold" id="pill-connection">● Offline</span>
-        <span class="pill" id="pill-tables">0 tables</span>
+
+      <div class="hero-art" aria-hidden="true">
+        <div class="chip-stack-art">
+          <span class="art-chip c100"></span><span class="art-chip c500"></span>
+          <span class="art-chip c50"></span><span class="art-chip c10"></span><span class="art-chip c5"></span>
+        </div>
+        <div class="card-fan">
+          <div class="fan-card f1"><b>A</b><i>♠</i></div>
+          <div class="fan-card f2"><b>K</b><i>♥</i></div>
+          <div class="fan-card f3"><b>Q</b><i>♦</i></div>
+        </div>
+        <div class="hero-badge">♠ ♥ ♣ ♦</div>
       </div>
     </section>
 
-    <div class="lobby-grid">
-      <!-- play -->
-      <section class="panel card-panel">
-        <header><span class="icon">🎯</span><h3>Play now</h3></header>
-        <div class="mode-cards">
-          <button class="mode-card" id="btn-practice">
-            <span class="emoji">🤖</span>
-            <span>
-              <strong>Practice vs AI</strong>
-              <span>Instant game against four bot personalities. No connection needed, chips refill automatically.</span>
-            </span>
-          </button>
-          <button class="mode-card" id="btn-online">
-            <span class="emoji">🌐</span>
-            <span>
-              <strong>Live table (multiplayer)</strong>
-              <span>Real-time table with chat — invite friends, or play alongside AI regulars while you wait.</span>
-            </span>
-          </button>
-          <button class="mode-card" id="btn-tutorial">
-            <span class="emoji">🎓</span>
-            <span>
-              <strong>Tutorial</strong>
-              <span>Learn Blind vs Seen play, Chaal, Side Show and hand rankings in two minutes.</span>
-            </span>
-          </button>
-        </div>
+    <!-- ── ticker ─────────────────────────────────────────────── -->
+    <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker-track"></div></div>
 
-        <details class="tiny" id="practice-options">
-          <summary class="muted" style="cursor:pointer">Practice settings</summary>
+    <!-- ── main grid ──────────────────────────────────────────── -->
+    <div class="casino-grid">
+
+      <!-- house tables -->
+      <section class="panel table-panel">
+        <header>
+          <span class="panel-icon">🎴</span>
+          <h3>House tables</h3>
+          <div class="spacer"></div>
+          <button class="chip-btn" id="btn-refresh" title="Refresh the table list">↻</button>
+        </header>
+        <div class="table-list" id="table-list"><p class="muted tiny">Looking for tables…</p></div>
+        <button class="cta small" id="btn-create"><span class="cta-icon">＋</span><span>Create your own table<small>invite friends with a link</small></span></button>
+      </section>
+
+      <!-- your stats -->
+      <section class="panel stats-panel">
+        <header><span class="panel-icon">📈</span><h3>Your play</h3></header>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="row wrap">
+          <span class="mini-pill" id="pill-best-hand">Best hand: —</span>
+        </div>
+        <details class="practice-options" id="practice-options">
+          <summary>Practice table settings</summary>
           <div class="split" style="margin-top:12px">
             <div class="field">
               <label for="practice-players">Players at the table</label>
@@ -793,7 +1214,7 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
               </select>
             </div>
             <div class="field">
-              <label for="practice-rounds">Betting rounds before compulsory show</label>
+              <label for="practice-rounds">Betting rounds</label>
               <select id="practice-rounds">
                 <option value="2">2 rounds</option>
                 <option value="3">3 rounds</option>
@@ -814,33 +1235,31 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
         </details>
       </section>
 
-      <!-- tables -->
-      <section class="panel card-panel">
-        <header><span class="icon">🃏</span><h3>Live tables</h3><div class="spacer"></div>
-          <button class="btn small ghost" id="btn-refresh">↻ Refresh</button>
-        </header>
-        <div class="table-list" id="table-list"><p class="muted tiny">Looking for tables…</p></div>
-        <button class="btn primary" id="btn-create">＋ Create your own table</button>
-      </section>
-
-      <!-- stats + leaderboard -->
-      <section class="panel card-panel">
-        <header><span class="icon">📈</span><h3>Your statistics</h3></header>
-        <div class="stat-grid" id="stat-grid"></div>
-        <div class="row"><span class="pill" id="pill-best-hand">Best hand: —</span></div>
-        <header style="margin-top:6px"><span class="icon">🏆</span><h3>Leaderboard</h3></header>
+      <!-- leaderboard -->
+      <section class="panel board-panel">
+        <header><span class="panel-icon">🏆</span><h3>High rollers</h3></header>
         <div class="board" id="leaderboard"><p class="muted tiny">Play a hand to appear here.</p></div>
-        <button class="btn small ghost" id="btn-reset-stats">Reset my statistics</button>
+        <button class="chip-btn wide" id="btn-reset-stats">Reset my statistics</button>
       </section>
 
-      <!-- rules -->
-      <section class="panel card-panel" style="grid-column: 1 / -1">
-        <header><span class="icon">📜</span><h3>Hand rankings — strongest to weakest</h3>
-          <div class="spacer"></div><span class="pill gold">Trail &gt; Pure Sequence &gt; Sequence &gt; Colour &gt; Pair &gt; High Card</span>
+      <!-- rankings -->
+      <section class="panel rankings-panel">
+        <header>
+          <span class="panel-icon">📜</span><h3>Hand rankings</h3>
+          <div class="spacer"></div>
+          <span class="mini-pill gold">strongest → weakest</span>
         </header>
         <div class="rank-chart" id="rank-chart"></div>
       </section>
     </div>
+
+    <footer class="casino-foot">
+      <span>🎴 Teen Patti Arena</span>
+      <span class="dot">·</span>
+      <span>Play money only — no real wagering</span>
+      <span class="dot">·</span>
+      <span>MIT licensed</span>
+    </footer>
   </div>
 </section>
 
@@ -2614,7 +3033,8 @@ const DEFAULTS = {
   },
   settings: {
     sound: true,
-    music: false,
+    ambience: true,
+    volume: 0.8,
     animations: 'normal',      // slow | normal | fast
     theme: 'dark',
     hints: true,               // show the "what should I do" helper
@@ -2735,22 +3155,169 @@ __exports.default = Store;
 });
 __define("public/js/sound.js", function (__exports, __require) {
 /**
- * Sound effects, synthesised with the Web Audio API — no asset downloads.
- * Every sound respects the "sound" setting and the animation speed, and the
- * context is only created after the first user gesture (browser policy).
+ * SoundBoard — every sound in the game, synthesised with the Web Audio API.
+ *
+ * No audio files: oscillators, noise buffers and filters build the casino
+ * atmosphere (room tone, chip clinks, card flicks, winning fanfares) at runtime.
+ *
+ * Three rules this module exists to solve:
+ *  1. Browsers refuse to make noise before a user gesture → `unlock()`.
+ *  2. Sound must never be an annoyance → master volume, an ambience switch and
+ *     a "test sound" button, all persisted in settings.
+ *  3. It must degrade silently → if Web Audio is missing, every call is a no-op.
  */
 
+const VOLUMES = {
+  master: 0.8,
+  sfx: 1,
+  ambience: 0.5
+};
+
 class SoundBoard {
-  constructor({ enabled = true, speed = 1 } = {}) {
+  constructor({ enabled = true, ambience = true, volume = VOLUMES.master, speed = 1 } = {}) {
     this.enabled = enabled;
+    this.ambienceEnabled = ambience;
+    this.volume = volume;
     this.speed = speed;
+    this.ctx = null;
+    this.master = null;
+    this.sfxBus = null;
+    this.ambienceBus = null;
+    this.ambienceNodes = null;
+    this.clinkTimer = null;
+    this.unlocked = false;
+    this.alive = true;
+    /** Every scheduled cue, so leaving a table can silence the tail cleanly. */
+    this.timers = new Set();
+    this.listeners = new Set();
+  }
+
+  /**
+   * setTimeout that is tracked (and therefore cancellable) and never fires once
+   * the board has been destroyed. Without this, a coin shower scheduled on the
+   * winning hand could fire after the player left the table.
+   */
+  later(fn, ms) {
+    const id = setTimeout(() => {
+      this.timers.delete(id);
+      if (!this.alive) return;
+      try {
+        fn();
+      } catch { /* audio must never break the game */ }
+    }, ms);
+    this.timers.add(id);
+    return id;
+  }
+
+  /** Cancel queued cues (used when leaving a table / tearing down the view). */
+  stopPending() {
+    for (const id of this.timers) clearTimeout(id);
+    this.timers.clear();
+  }
+
+  /** Release the audio graph entirely. */
+  destroy() {
+    this.alive = false;
+    this.stopPending();
+    this.stopAmbience();
+    try {
+      this.ctx?.close();
+    } catch { /* already closed */ }
     this.ctx = null;
     this.master = null;
   }
 
+  // ── lifecycle ───────────────────────────────────────────────────────────
+
+  /** Create the audio graph (safe to call repeatedly). */
+  ensure() {
+    if (!this.alive) return null;
+    if (this.ctx) return this.ctx;
+    const Ctor = typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : null;
+    if (!Ctor) return null;
+    try {
+      this.ctx = new Ctor();
+    } catch {
+      return null;
+    }
+
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.enabled ? this.volume : 0;
+    this.master.connect(this.ctx.destination);
+
+    this.sfxBus = this.ctx.createGain();
+    this.sfxBus.gain.value = VOLUMES.sfx;
+    this.sfxBus.connect(this.master);
+
+    this.ambienceBus = this.ctx.createGain();
+    this.ambienceBus.gain.value = 0;   // faded in by startAmbience()
+    this.ambienceBus.connect(this.master);
+
+    return this.ctx;
+  }
+
+  /**
+   * Must be called from inside a user gesture. Also the single place where
+   * "sound is available" is decided, so the UI can prompt when it is not.
+   */
+  unlock() {
+    const ctx = this.ensure();
+    if (!ctx) {
+      this.setAvailable(false);
+      return false;
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    this.unlocked = ctx.state !== 'suspended';
+    this.setAvailable(true);
+    if (this.enabled && this.ambienceEnabled) this.startAmbience();
+    return true;
+  }
+
+  /** Alias kept for readability at call sites that just want audio running. */
+  resume() {
+    return this.unlock();
+  }
+
+  setAvailable(available) {
+    if (this.available === available) return;
+    this.available = available;
+    for (const listener of this.listeners) listener({ available });
+  }
+
+  onAvailability(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  get state() {
+    return {
+      available: Boolean(this.ctx) && this.ctx.state === 'running',
+      enabled: this.enabled,
+      ambience: this.ambienceEnabled,
+      volume: this.volume
+    };
+  }
+
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
-    if (this.master) this.master.gain.value = this.enabled ? 0.7 : 0;
+    if (this.master) {
+      this.master.gain.setTargetAtTime(this.enabled ? this.volume : 0, this.ctx.currentTime, 0.02);
+    }
+    if (!this.enabled && this.ambienceNodes) this.stopAmbience();
+    if (this.enabled && this.ambienceEnabled && this.ctx?.state === 'running') this.startAmbience();
+  }
+
+  setVolume(volume) {
+    this.volume = Math.min(1, Math.max(0, Number(volume) || 0));
+    if (this.master && this.enabled) {
+      this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.03);
+    }
+  }
+
+  setAmbience(enabled) {
+    this.ambienceEnabled = Boolean(enabled);
+    if (this.ambienceEnabled && this.enabled) this.startAmbience();
+    else this.stopAmbience();
   }
 
   /** Animation speed also stretches or shortens the audio cues. */
@@ -2758,26 +3325,12 @@ class SoundBoard {
     this.speed = speed || 1;
   }
 
-  ensure() {
-    if (this.ctx) return this.ctx;
-    const Ctor = window.AudioContext || window.webkitAudioContext;
-    if (!Ctor) return null;
-    this.ctx = new Ctor();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = this.enabled ? 0.7 : 0;
-    this.master.connect(this.ctx.destination);
-    return this.ctx;
-  }
+  // ── primitives ──────────────────────────────────────────────────────────
 
-  resume() {
+  tone({ freq = 440, type = 'sine', duration = 0.12, gain = 0.16, delay = 0, sweep = null, bus = 'sfx' }) {
+    if (!this.enabled || !this.alive) return;
     const ctx = this.ensure();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
-  }
-
-  tone({ freq = 440, type = 'sine', duration = 0.12, gain = 0.16, delay = 0, sweep = null }) {
-    if (!this.enabled) return;
-    const ctx = this.ensure();
-    if (!ctx) return;
+    if (!ctx || ctx.state === 'suspended') return;
     const start = ctx.currentTime + delay * this.speed;
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
@@ -2787,16 +3340,16 @@ class SoundBoard {
     env.gain.setValueAtTime(0.0001, start);
     env.gain.exponentialRampToValueAtTime(gain, start + 0.012);
     env.gain.exponentialRampToValueAtTime(0.0001, start + duration * this.speed);
-    osc.connect(env).connect(this.master);
+    osc.connect(env).connect(bus === 'ambience' ? this.ambienceBus : this.sfxBus);
     osc.start(start);
     osc.stop(start + duration * this.speed + 0.05);
   }
 
-  noise({ duration = 0.18, gain = 0.12, delay = 0, filter = 2200 }) {
-    if (!this.enabled) return;
+  noise({ duration = 0.18, gain = 0.12, delay = 0, filter = 2200, q = 1, type = 'lowpass', bus = 'sfx' }) {
+    if (!this.enabled || !this.alive) return;
     const ctx = this.ensure();
-    if (!ctx) return;
-    const frames = Math.floor(ctx.sampleRate * duration * this.speed);
+    if (!ctx || ctx.state === 'suspended') return;
+    const frames = Math.max(1, Math.floor(ctx.sampleRate * duration * this.speed));
     const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < frames; i += 1) {
@@ -2804,53 +3357,190 @@ class SoundBoard {
     }
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = filter;
+    const biquad = ctx.createBiquadFilter();
+    biquad.type = type;
+    biquad.frequency.value = filter;
+    biquad.Q.value = q;
     const env = ctx.createGain();
     env.gain.value = gain;
-    source.connect(lp).connect(env).connect(this.master);
+    source.connect(biquad).connect(env).connect(bus === 'ambience' ? this.ambienceBus : this.sfxBus);
     source.start(ctx.currentTime + delay * this.speed);
   }
 
-  // ── cues ────────────────────────────────────────────────────────────────
-  click() { this.tone({ freq: 620, type: 'triangle', duration: 0.05, gain: 0.08 }); }
+  /** A short metallic clink — the sound of one chip landing on others. */
+  clink({ delay = 0, gain = 0.05, pitch = 1 } = {}) {
+    if (!this.enabled || !this.alive) return;
+    const base = (2100 + Math.random() * 900) * pitch;
+    this.tone({ freq: base, type: 'triangle', duration: 0.045, gain, delay });
+    this.tone({ freq: base * 1.71, type: 'sine', duration: 0.035, gain: gain * 0.6, delay: delay + 0.008 });
+    this.noise({ duration: 0.03, gain: gain * 0.5, delay, filter: 6500, type: 'highpass' });
+  }
+
+  // ── ambience ────────────────────────────────────────────────────────────
+
+  /** Low casino room tone plus the occasional distant chip clink. */
+  startAmbience() {
+    if (!this.enabled || !this.ambienceEnabled) return;
+    const ctx = this.ensure();
+    if (!ctx || ctx.state !== 'running' || this.ambienceNodes) return;
+
+    const bedGain = ctx.createGain();
+    bedGain.gain.value = 0;
+    bedGain.connect(this.ambienceBus);
+
+    // Room tone: filtered pink-ish noise, looped.
+    const seconds = 4;
+    const frames = ctx.sampleRate * seconds;
+    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < frames; i += 1) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;      // brown-ish noise
+      data[i] = last * 3.2;
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    source.connect(lp).connect(bedGain);
+    source.start();
+
+    // Slow shimmer that breathes over the top — distant slot machines.
+    const shimmer = ctx.createOscillator();
+    const shimmerGain = ctx.createGain();
+    shimmer.type = 'sine';
+    shimmer.frequency.value = 1180;
+    shimmerGain.gain.value = 0;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.06;
+    lfoGain.gain.value = 0.006;
+    lfo.connect(lfoGain).connect(shimmerGain.gain);
+    shimmer.connect(shimmerGain).connect(this.ambienceBus);
+    shimmer.start();
+    lfo.start();
+
+    bedGain.gain.setTargetAtTime(0.05, ctx.currentTime, 1.6);
+    this.ambienceNodes = { source, shimmer, lfo, bedGain, shimmerGain };
+
+    // Occasional chip clinks far away.
+    const scheduleClink = () => {
+      if (!this.ambienceNodes || !this.enabled) return;
+      this.clink({ gain: 0.012, delay: 0, pitch: 0.85 + Math.random() * 0.3 });
+      if (Math.random() < 0.4) this.clink({ gain: 0.009, delay: 0.08 + Math.random() * 0.12, pitch: 0.8 });
+      this.clinkTimer = this.later(scheduleClink, 2600 + Math.random() * 5200);
+    };
+    this.clinkTimer = this.later(scheduleClink, 1800);
+  }
+
+  stopAmbience() {
+    if (this.clinkTimer) clearTimeout(this.clinkTimer);
+    this.clinkTimer = null;
+    const nodes = this.ambienceNodes;
+    if (!nodes || !this.ctx) return;
+    this.ambienceNodes = null;
+    const now = this.ctx.currentTime;
+    nodes.bedGain.gain.setTargetAtTime(0, now, 0.5);
+    nodes.shimmerGain?.gain.setTargetAtTime?.(0, now, 0.5);
+    this.later(() => {
+      try {
+        nodes.source.stop();
+        nodes.shimmer?.stop();
+        nodes.lfo?.stop();
+      } catch { /* already stopped */ }
+    }, 2600);
+  }
+
+  // ── table cues ──────────────────────────────────────────────────────────
+
+  click() { this.tone({ freq: 620, type: 'triangle', duration: 0.05, gain: 0.07 }); }
+  hover() { this.tone({ freq: 1150, type: 'sine', duration: 0.025, gain: 0.028 }); }
   shuffle() {
-    for (let i = 0; i < 7; i += 1) this.noise({ duration: 0.06, gain: 0.08, delay: i * 0.045, filter: 3400 });
+    for (let i = 0; i < 9; i += 1) {
+      this.noise({ duration: 0.05, gain: 0.075, delay: i * 0.035, filter: 3400 + i * 120, type: 'bandpass', q: 0.7 });
+    }
   }
   deal(index = 0) {
-    this.noise({ duration: 0.07, gain: 0.1, delay: index * 0.07, filter: 2600 });
-    this.tone({ freq: 900 - index * 40, type: 'triangle', duration: 0.04, gain: 0.05, delay: index * 0.07 });
+    this.noise({ duration: 0.07, gain: 0.1, delay: index * 0.07, filter: 2600, type: 'bandpass', q: 0.8 });
+    this.tone({ freq: 900 - index * 40, type: 'triangle', duration: 0.04, gain: 0.045, delay: index * 0.07 });
   }
-  flip() { this.noise({ duration: 0.09, gain: 0.1, filter: 4200 }); }
-  chip() {
-    this.tone({ freq: 1180, type: 'square', duration: 0.05, gain: 0.07 });
-    this.tone({ freq: 1580, type: 'square', duration: 0.045, gain: 0.05, delay: 0.035 });
-  }
+  flip() { this.noise({ duration: 0.09, gain: 0.1, filter: 4200, type: 'bandpass', q: 0.6 }); }
+
+  chip() { this.clink({ gain: 0.05 }); }
   chipStack(count = 3) {
-    for (let i = 0; i < Math.min(count, 5); i += 1) this.chip();
+    for (let i = 0; i < Math.min(count, 6); i += 1) {
+      this.later(() => this.clink({ gain: 0.045, pitch: 0.9 + i * 0.06 }), i * 55);
+    }
   }
+  call() { this.chipStack(2); }
+  raise() { this.chipStack(4); }
+  check() { this.noise({ duration: 0.1, gain: 0.05, filter: 1200, type: 'bandpass' }); }
+  fold() { this.noise({ duration: 0.22, gain: 0.08, filter: 900 }); }
+
+  /** Dramatic riser for an all-in. */
+  allIn() {
+    this.tone({ freq: 180, type: 'sawtooth', duration: 0.85, gain: 0.07, sweep: 900 });
+    this.noise({ duration: 0.9, gain: 0.06, filter: 900, type: 'bandpass', q: 0.5 });
+    this.later(() => this.chipStack(6), 420);
+  }
+
   turn() {
-    this.tone({ freq: 880, type: 'sine', duration: 0.1, gain: 0.12 });
-    this.tone({ freq: 1320, type: 'sine', duration: 0.14, gain: 0.08, delay: 0.08 });
+    this.tone({ freq: 880, type: 'sine', duration: 0.1, gain: 0.11 });
+    this.tone({ freq: 1320, type: 'sine', duration: 0.14, gain: 0.075, delay: 0.08 });
   }
-  fold() { this.noise({ duration: 0.22, gain: 0.09, filter: 900 }); }
-  win() {
-    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-      this.tone({ freq, type: 'triangle', duration: 0.28, gain: 0.14, delay: i * 0.1 });
-    });
-    this.noise({ duration: 0.5, gain: 0.05, delay: 0.1, filter: 6000 });
+
+  /** Countdown warning: a tick per second for the last few seconds. */
+  tick(secondsLeft = 5) {
+    const urgency = secondsLeft <= 2 ? 1.25 : 1;
+    this.tone({ freq: 1180 * urgency, type: 'square', duration: 0.04, gain: 0.05 });
   }
-  lose() {
-    this.tone({ freq: 320, type: 'sawtooth', duration: 0.3, gain: 0.09, sweep: 150 });
-  }
+
   show() {
     this.tone({ freq: 392, type: 'triangle', duration: 0.16, gain: 0.12 });
     this.tone({ freq: 587, type: 'triangle', duration: 0.24, gain: 0.1, delay: 0.12 });
   }
-  message() { this.tone({ freq: 740, type: 'sine', duration: 0.08, gain: 0.08 }); }
-  reaction() { this.tone({ freq: 1046, type: 'sine', duration: 0.12, gain: 0.09, sweep: 1568 }); }
-  error() { this.tone({ freq: 220, type: 'square', duration: 0.14, gain: 0.09 }); }
+
+  message() { this.tone({ freq: 740, type: 'sine', duration: 0.08, gain: 0.07 }); }
+  reaction() { this.tone({ freq: 1046, type: 'sine', duration: 0.12, gain: 0.08, sweep: 1568 }); }
+  error() {
+    this.tone({ freq: 220, type: 'square', duration: 0.14, gain: 0.08 });
+    this.tone({ freq: 165, type: 'square', duration: 0.16, gain: 0.06, delay: 0.1 });
+  }
+  join() {
+    [659.25, 987.77, 1318.5].forEach((freq, i) => this.tone({ freq, type: 'triangle', duration: 0.16, gain: 0.09, delay: i * 0.07 }));
+  }
+  whoosh() { this.noise({ duration: 0.32, gain: 0.05, filter: 500, type: 'highpass' }); }
+
+  /** Winning fanfare; a big pot gets the full treatment. */
+  win(big = false) {
+    const notes = big
+      ? [523.25, 659.25, 783.99, 1046.5, 1318.5, 1567.98]
+      : [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, i) => {
+      this.tone({ freq, type: 'triangle', duration: 0.3, gain: 0.13, delay: i * 0.09 });
+      this.tone({ freq: freq / 2, type: 'sine', duration: 0.34, gain: 0.06, delay: i * 0.09 });
+    });
+    // coin shower
+    const drops = big ? 14 : 7;
+    for (let i = 0; i < drops; i += 1) {
+      this.later(() => this.clink({ gain: 0.03, pitch: 1.1 + Math.random() * 0.5 }), 200 + i * 90);
+    }
+    this.noise({ duration: big ? 0.8 : 0.45, gain: 0.04, delay: 0.1, filter: 6000, type: 'highpass' });
+  }
+
+  lose() {
+    this.tone({ freq: 320, type: 'sawtooth', duration: 0.3, gain: 0.075, sweep: 150 });
+    this.tone({ freq: 214, type: 'sine', duration: 0.4, gain: 0.05, delay: 0.16, sweep: 120 });
+  }
+
+  /** Rising "time is nearly up" alarm for your own turn. */
+  warning() {
+    this.tone({ freq: 660, type: 'square', duration: 0.09, gain: 0.06 });
+    this.tone({ freq: 880, type: 'square', duration: 0.09, gain: 0.06, delay: 0.1 });
+  }
 }
 
 
@@ -3016,7 +3706,8 @@ function closeTopModal() {
 
 /** A shareable link the host can hand to friends (falls back to the current URL). */
 function inviteLink(tableId) {
-  const url = new URL(window.location.href);
+  const href = typeof window !== 'undefined' ? window.location.href : 'http://localhost:4000/';
+  const url = new URL(href);
   url.searchParams.set('table', tableId);
   return url.toString();
 }
@@ -3096,15 +3787,20 @@ class OnlineController {
   get isOnline() { return true; }
 
   get url() {
-    const { protocol, host } = window.location;
+    const { protocol, host } = (typeof window !== 'undefined' ? window : {}).location || { protocol: 'http:', host: 'localhost' };
     return `${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}/ws?profile=${encodeURIComponent(this.profile.id)}`;
   }
 
   connect() {
     this.intentionalClose = false;
     this.onStatus({ state: this.connected ? 'connected' : 'connecting' });
+    const Socket = typeof window !== 'undefined' ? window.WebSocket : null;
+    if (!Socket) {
+      this.onError('WebSockets are not available in this environment');
+      return;
+    }
     try {
-      this.socket = new window.WebSocket(this.url);
+      this.socket = new Socket(this.url);
     } catch (error) {
       this.onError(`Cannot reach the game server: ${error.message}`);
       this.scheduleReconnect();
@@ -3155,7 +3851,8 @@ class OnlineController {
   }
 
   send(message) {
-    if (this.socket?.readyState === window.WebSocket.OPEN) {
+    const Socket = typeof window !== 'undefined' ? window.WebSocket : null;
+    if (Socket && this.socket?.readyState === Socket.OPEN) {
       this.socket.send(JSON.stringify(message));
       return true;
     }
@@ -3659,6 +4356,9 @@ class GameView {
     this.lastWinner = null;
     this.raiseValue = 0;
     this.spectating = false;
+    this.destroyed = false;
+    /** Animating DOM nodes (flying chips, sparkles) are cleaned up on destroy. */
+    this.viewTimers = new Set();
   }
 
   mount() {
@@ -3749,6 +4449,11 @@ class GameView {
       this.els.potDisplay.classList.add('bump');
     }
     this.renderPotChips(snapshot.pot);
+    if (snapshot.you?.isTurn && this.lastTurnAnnounced !== snapshot.turnDeadline) {
+      this.lastTurnAnnounced = snapshot.turnDeadline;
+      this.lastTickSecond = null;
+      this.sound.turn();
+    }
     this.renderSeats(snapshot);
     this.renderMyArea(snapshot);
     this.renderActionBar(snapshot);
@@ -4240,13 +4945,18 @@ class GameView {
         bar.style.stroke = fraction < 0.25 ? 'var(--red)' : 'var(--gold)';
       }
       const isMe = this.snapshot.you?.isTurn;
+      const seconds = Math.ceil(remaining / 1000);
       const waiting = this.els.actionBar.querySelector('.turn-banner span:last-child');
       if (waiting && isMe === false) {
-        waiting.textContent = `${turnSeat.isBot ? '🤖 ' : ''}${turnSeat.name} is thinking… ${Math.ceil(remaining / 1000)}s`;
+        waiting.textContent = `${turnSeat.isBot ? '🤖 ' : ''}${turnSeat.name} is thinking… ${seconds}s`;
       }
-      if (isMe) {
-        const heading = this.els.actionBar.querySelector('.turn-banner');
-        if (heading) heading.textContent = '';
+      // Audible clock for your own turn: a soft tick each second, then a warning.
+      if (isMe && seconds !== this.lastTickSecond) {
+        this.lastTickSecond = seconds;
+        if (seconds <= 5 && seconds > 0) {
+          this.sound.tick(seconds);
+          if (seconds === 5) this.sound.warning();
+        }
       }
       if (remaining <= 0) this.stopCountdown();
     };
@@ -4318,20 +5028,26 @@ class GameView {
         this.sound.fold();
         break;
       case 'allin':
-        this.sound.chipStack(4);
+        this.sound.allIn();
         this.flyChips(node.el, Math.min(6, 2 + Math.floor((event.amount || 0) / 50)));
         break;
       case 'raise':
-        this.sound.chip();
+        this.sound.raise();
         this.flyChips(node.el, 3);
         break;
       case 'chaal':
       case 'blind':
-        this.sound.chip();
+        this.sound.call();
         this.flyChips(node.el, 1);
+        break;
+      case 'check':
+        this.sound.check();
         break;
       case 'see':
         this.sound.flip();
+        break;
+      case 'show':
+        this.sound.show();
         break;
       default:
         break;
@@ -4376,8 +5092,10 @@ class GameView {
     const snapshot = this.snapshot;
     const myWinner = event.winners.find((winner) => winner.id === snapshot?.you?.id);
     if (myWinner) {
-      this.sound.win();
-      this.sparkle();
+      // A pot worth more than 8x the boot gets the full coin-shower fanfare.
+      const big = Boolean(snapshot?.config?.boot && event.pot >= snapshot.config.boot * 8);
+      this.sound.win(big);
+      this.sparkle(big ? 22 : 12);
     } else {
       this.sound.lose();
     }
@@ -4389,8 +5107,8 @@ class GameView {
         el('div', { class: 'sub', text: event.reason === 'fold' ? 'everyone else packed' : `pot ${formatChips(event.pot)}` })
       ]);
       this.els.winnerHost.replaceChildren(banner);
-      setTimeout(() => {
-        if (this.els.winnerHost.contains(banner)) banner.remove();
+      this.later(() => {
+        if (this.els.winnerHost?.contains(banner)) banner.remove();
       }, 4200);
     }
     this.showShowdownCards();
@@ -4420,6 +5138,33 @@ class GameView {
     });
   }
 
+  /** Safe rAF: no-op once the view is destroyed, falls back to a timeout. */
+  frame(callback) {
+    if (this.destroyed) return;
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, 16);
+    schedule(() => {
+      if (this.destroyed) return;
+      try {
+        callback();
+      } catch { /* the view may be gone */ }
+    });
+  }
+
+  /** Safe timeout that is cancelled on destroy. */
+  later(callback, ms) {
+    const id = setTimeout(() => {
+      this.viewTimers.delete(id);
+      if (this.destroyed) return;
+      try {
+        callback();
+      } catch { /* the view may be gone */ }
+    }, ms);
+    this.viewTimers.add(id);
+    return id;
+  }
+
   flyChips(fromEl, count = 1) {
     const to = this.els.potDisplay.getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
@@ -4429,24 +5174,24 @@ class GameView {
       chip.style.top = `${from.top + from.height / 2}px`;
       chip.style.transitionDelay = `${i * 55}ms`;
       document.body.append(chip);
-      requestAnimationFrame(() => {
+      this.frame(() => {
         chip.style.transform = `translate(${to.left + to.width / 2 - from.left - from.width / 2}px, ${to.top + to.height / 2 - from.top - from.height / 2}px) scale(0.7)`;
         chip.style.opacity = '0.9';
       });
-      setTimeout(() => chip.remove(), 800 + i * 60);
+      this.later(() => chip.remove(), 800 + i * 60);
     }
   }
 
-  sparkle() {
+  sparkle(count = 14) {
     const rect = this.els.potDisplay.getBoundingClientRect();
-    for (let i = 0; i < 14; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       const node = el('div', { class: 'sparkle', text: ['✨', '⭐', '🎉', '💫'][i % 4] });
       node.style.left = `${rect.left + rect.width / 2 + (Math.random() * 220 - 110)}px`;
       node.style.top = `${rect.top + rect.height / 2 + (Math.random() * 40 - 20)}px`;
       node.style.setProperty('--sx', `${Math.random() * 80 - 40}px`);
       node.style.animationDelay = `${i * 45}ms`;
       document.body.append(node);
-      setTimeout(() => node.remove(), 1600 + i * 50);
+      this.later(() => node.remove(), 1600 + i * 50);
     }
   }
 
@@ -4491,7 +5236,7 @@ class GameView {
     const rect = seat?.el.getBoundingClientRect() || this.els.tableArea?.getBoundingClientRect() || { left: 200, top: 200, width: 0, height: 0 };
     const node = el('div', { class: 'reaction-float', text, style: { left: `${rect.left + rect.width / 2}px`, top: `${rect.top}px` } });
     document.body.append(node);
-    setTimeout(() => node.remove(), 1600);
+    this.later(() => node.remove(), 1600);
   }
 
   // ─────────────────────────────────────────────────────────────── plumbing ──
@@ -4513,7 +5258,12 @@ class GameView {
   }
 
   destroy() {
+    this.destroyed = true;
     this.stopCountdown();
+    for (const id of this.viewTimers) clearTimeout(id);
+    this.viewTimers.clear();
+    // Cancel any queued cue (coin showers, chip tails) so nothing fires later.
+    this.sound.stopPending?.();
     this.seats.clear();
     this.els?.seats?.replaceChildren();
     this.els?.winnerHost?.replaceChildren();
@@ -4555,6 +5305,8 @@ class App {
     this.store = new Store();
     this.sound = new SoundBoard({
       enabled: this.store.settings.sound,
+      ambience: this.store.settings.ambience !== false,
+      volume: this.store.settings.volume ?? 0.8,
       speed: SPEED[this.store.settings.animations] || 1
     });
     this.mode = null;                 // 'practice' | 'online'
@@ -4580,6 +5332,7 @@ class App {
   // ───────────────────────────────────────────────────────────── bootstrap ──
 
   init() {
+    this.disposed = false;
     this.applyTheme(this.store.settings.theme, { silent: true });
     this.applySpeed(this.store.settings.animations);
     this.view.mount();
@@ -4598,6 +5351,93 @@ class App {
       this.startOnline({ tableId: wanted });
     }
     return this;
+  }
+
+  /**
+   * Browsers only allow audio after a user gesture. The first click, tap or key
+   * press anywhere unlocks the AudioContext and starts the casino ambience; if
+   * the browser still refuses, the lobby shows a "tap to enable sound" hint.
+   */
+  primeAudio() {
+    const onGesture = () => {
+      const ok = this.sound.unlock();
+      if (ok) {
+        this.hideSoundHint();
+        document.removeEventListener('pointerdown', onGesture);
+        document.removeEventListener('keydown', onGesture);
+      } else {
+        this.showSoundHint();
+      }
+    };
+    document.addEventListener('pointerdown', onGesture);
+    document.addEventListener('keydown', onGesture);
+    if (!this.sound.ctx) this.showSoundHint();
+  }
+
+  showSoundHint() {
+    const hint = $('#sound-unlock');
+    if (hint) hint.hidden = !this.store.settings.sound;
+  }
+
+  hideSoundHint() {
+    const hint = $('#sound-unlock');
+    if (hint) hint.hidden = true;
+  }
+
+  /** Buttons, tiles and table cards get a soft tick under the cursor. */
+  wireHoverSounds(root = document) {
+    root.querySelectorAll('.cta, .icon-btn, .chip-btn, .mode-card, .table-card, .btn, #profile-chip .player-card').forEach((node) => {
+      if (node.dataset.soundWired) return;
+      node.dataset.soundWired = '1';
+      node.addEventListener('pointerenter', () => this.sound.hover());
+      node.addEventListener('click', () => {
+        this.sound.unlock();
+        this.sound.click();
+      });
+    });
+  }
+
+  renderTicker(tables = []) {
+    const track = $('#ticker-track');
+    if (!track) return;
+    const boots = tables.map((table) => table.boot).sort((a, b) => a - b);
+    const items = [
+      ['♠', 'Trail beats everything'],
+      ['♥', `Boot from <b>${boots[0] ?? 10}</b> chips`],
+      ['♣', 'Play blind at half price'],
+      ['♦', 'Side show the player on your right'],
+      ['♠', `Biggest pot on the floor <b>${formatChips(this.store.stats.biggestPot)}</b>`],
+      ['♥', 'House tables run 24/7 with AI regulars'],
+      ['♣', 'Play money only — no real wagering']
+    ].map(([suit, text], index) => `<span>${suit} ${text}</span>`).join('');
+    // duplicated for a seamless loop
+    track.replaceChildren();
+    track.insertAdjacentHTML?.('afterbegin', items + items);
+    if (!track.childElementCount) track.innerHTML = items + items;
+  }
+
+  /** Count the hero "biggest pot" up like a slot machine. */
+  animateJackpot(target = this.store.stats.biggestPot) {
+    const node = $('#jackpot-value');
+    if (!node) return;
+    const from = Number(node.dataset.value || 0);
+    const to = Math.max(from, Number(target) || 0);
+    node.dataset.value = String(to);
+    if (to === from) {
+      node.textContent = formatChips(to);
+      return;
+    }
+    const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+    const started = now();
+    const duration = 900;
+    const step = () => {
+      if (!node.isConnected) return;
+      const t = Math.min(1, (now() - started) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      node.textContent = formatChips(Math.round(from + (to - from) * eased));
+      if (t < 1) this.frame(step);
+    };
+    this.frame(step);
   }
 
   bindGlobal() {
@@ -4626,8 +5466,11 @@ class App {
   }
 
   bindLobby() {
+    $('#sound-unlock').onclick = () => {
+      if (this.sound.unlock()) this.hideSoundHint();
+    };
     $('#btn-sound').onclick = () => {
-      this.sound.resume();
+      this.sound.unlock();
       this.store.setSetting('sound', !this.store.settings.sound);
       this.sound.setEnabled(this.store.settings.sound);
       this.syncTopButtons();
@@ -4640,7 +5483,7 @@ class App {
     $('#btn-settings').onclick = () => this.openSettings();
     $('#btn-help').onclick = () => this.openTutorial();
     $('#btn-practice').onclick = () => {
-      this.sound.resume();
+      this.sound.unlock();
       this.startPractice();
     };
     $('#btn-online').onclick = () => this.startOnline({});
@@ -4660,12 +5503,14 @@ class App {
     };
     $('#profile-chip').onclick = () => this.openProfileEditor();
     this.syncTopButtons();
+    this.wireHoverSounds();
+    this.animateJackpot();
     if (STANDALONE) {
-      $('#hero-title').textContent = 'Your offline Teen Patti table';
-      $('#hero-copy').textContent = 'This single-file build runs straight from your disk — no server, no internet. Press “Practice vs AI” to deal. Everything else (rules, AI, stats, sounds) is identical to the online game.';
-      $('#btn-online').querySelector('span span').textContent = 'Needs the full project — run "npm start" for live tables.';
-      $('#btn-online').disabled = true;
-      $('#btn-online').title = 'Multiplayer needs the Node server from the full project';
+      const online = $('#btn-online');
+      online.querySelector('small').textContent = 'needs the full project (npm start)';
+      online.disabled = true;
+      online.title = 'Multiplayer needs the Node server from the full project';
+      this.renderTicker([]);
     }
   }
 
@@ -4687,12 +5532,17 @@ class App {
 
   renderProfileChip() {
     const { name, avatar } = this.store.profile;
+    const chipBalance = $('#pill-jackpot') ? null : null;
     $('#profile-chip').replaceChildren(
-      el('span', { class: 'pill', style: { cursor: 'pointer' } }, [
-        el('span', { text: avatar, style: { fontSize: '16px' } }),
-        el('span', { text: name })
+      el('div', { class: 'player-card', title: 'Edit your name and avatar' }, [
+        el('span', { class: 'pc-avatar', text: avatar }),
+        el('div', {}, [
+          el('b', { class: 'pc-name', text: name }),
+          el('div', { class: 'pc-sub', text: `${this.store.stats.hands} hands · ${this.store.winRate}% wins` })
+        ])
       ])
     );
+    void chipBalance;
   }
 
   renderStats() {
@@ -4707,6 +5557,8 @@ class App {
     $('#pill-best-hand').textContent = stats.bestHand
       ? `Best hand: ${stats.bestHand.name}`
       : 'Best hand: —';
+    this.animateJackpot(stats.biggestPot);
+    this.renderTicker(this.lastTables || []);
   }
 
   renderRankChart(highlightCategory = null) {
@@ -4727,54 +5579,78 @@ class App {
         el('b', { text: entry.name }),
         el('div', { class: 'tiny muted', text: CATEGORY_LABEL[entry.category] })
       ]),
-      cardRow(examples[entry.category] || [], { size: 'sm' })
+      (() => {
+        const row = cardRow(examples[entry.category] || [], { size: 'sm' });
+        row.classList.add('cards-mini');
+        return row;
+      })()
     ])));
   }
 
   renderLeaderboard(entries) {
     const host = $('#leaderboard');
     if (!entries?.length) {
-      host.replaceChildren(el('p', { class: 'muted tiny', text: this.mode === 'online' ? 'No hands played on the server yet.' : 'Connect to a live table to build the leaderboard.' }));
+      host.replaceChildren(el('p', {
+        class: 'muted tiny',
+        text: this.mode === 'online' ? 'No hands played on the server yet.' : 'Connect to a live table to build the leaderboard.'
+      }));
       return;
     }
-    host.replaceChildren(...entries.map((entry, index) => el('div', { class: 'board-row' }, [
-      el('span', { class: 'place', text: `#${index + 1}` }),
-      el('span', {}, [
+    const medals = ['🥇', '🥈', '🥉'];
+    host.replaceChildren(...entries.map((entry, index) => el('div', {
+      class: `board-row ${index === 0 ? 'first' : index === 1 ? 'second' : index === 2 ? 'third' : ''}`
+    }, [
+      el('span', { class: 'place', text: medals[index] || `#${index + 1}` }),
+      el('span', { class: 'who' }, [
         el('b', { text: `${entry.avatar || '🙂'} ${entry.name}` }),
-        el('span', { class: 'tiny muted', text: ` · ${entry.hands} hands · ${entry.wins} wins` })
+        el('div', { text: `${entry.hands} hands · ${entry.wins} wins · best pot ${formatChips(entry.biggestPot || 0)}` })
       ]),
-      el('span', { class: entry.net >= 0 ? 'pill green' : 'pill red', text: formatSigned(entry.net) })
+      el('span', { class: `net ${entry.net >= 0 ? 'up' : 'down'}`, text: formatSigned(entry.net) })
     ])));
   }
 
   renderTables(tables = []) {
     const host = $('#table-list');
-    $('#pill-tables').textContent = `${tables.length} table${tables.length === 1 ? '' : 's'}`;
+    const pill = $('#pill-tables');
+    this.lastTables = tables;
+    if (pill) pill.textContent = `${tables.length} table${tables.length === 1 ? '' : 's'} on the floor`;
+    this.renderTicker(tables);
+
     if (!tables.length) {
       host.replaceChildren(el('p', { class: 'muted tiny', text: 'No live tables right now — create one and invite a friend.' }));
       return;
     }
+
     host.replaceChildren(...tables.map((table) => {
-      const row = el('div', { class: 'table-row' }, [
-        el('div', { class: 'name' }, [
+      const dots = el('span', { class: 'seat-dots' }, Array.from({ length: table.maxPlayers }, (unused, index) => el('span', {
+        class: `seat-dot ${index < table.players ? 'taken' : ''}`
+      })));
+
+      const card = el('div', { class: 'table-card' }, [
+        el('div', { class: 'tc-name' }, [
           el('span', { text: '🎴' }),
-          el('span', { text: table.name }),
-          table.phase === 'betting' ? el('span', { class: 'pill green', text: 'in play' }) : el('span', { class: 'pill', text: 'waiting' })
+          el('span', { text: table.name })
         ]),
         el('button', {
-          class: 'btn small primary',
+          class: 'tc-join',
           text: 'Sit down',
           onclick: () => this.startOnline({ tableId: table.id, buyIn: table.boot * 50 })
         }),
-        el('div', { class: 'meta' }, [
-          el('span', { class: 'pill', text: `👤 ${table.players}/${table.maxPlayers}` }),
-          el('span', { class: 'pill gold', text: `boot ${formatChips(table.boot)}` }),
-          el('span', { class: 'pill', text: `pot ${formatChips(table.pot)}` }),
-          el('span', { class: 'pill blue', text: `hand #${table.handNo}` })
+        el('div', { class: 'tc-meta' }, [
+          el('span', { class: 'badge gold', text: `boot ${formatChips(table.boot)}` }),
+          el('span', { class: 'badge', text: `pot ${formatChips(table.pot)}` }),
+          el('span', { class: 'badge', text: `hand #${table.handNo}` }),
+          table.phase === 'betting'
+            ? el('span', { class: 'badge live', text: '● in play' })
+            : el('span', { class: 'badge', text: 'waiting' }),
+          table.humans === 0 ? el('span', { class: 'badge bot', text: 'AI table' }) : null,
+          dots,
+          el('span', { class: 'tc-boot', text: `${table.players}/${table.maxPlayers} seated` })
         ])
       ]);
-      return row;
+      return card;
     }));
+    this.wireHoverSounds(host);
   }
 
   // ─────────────────────────────────────────────────────────────── practice ──
@@ -4847,7 +5723,7 @@ class App {
     }
     this.teardown();
     this.mode = 'online';
-    this.sound.resume();
+    this.sound.unlock();
     let joinRequested = false;
 
     this.online = new OnlineController({
@@ -4881,6 +5757,8 @@ class App {
       onState: (snapshot, events, table) => this.view.render(snapshot, table),
       onEvent: (events) => this.view.handleEvents(events),
       onJoined: (message) => {
+        this.sound.unlock();
+        this.sound.join();
         if (!tableId) return;
         const info = message.table;
         this.view.pushChat({
@@ -4960,6 +5838,28 @@ class App {
     });
   }
 
+  /** True while the app's DOM is still attached (false after teardown/close). */
+  get alive() {
+    return !this.disposed;
+  }
+
+  /**
+   * requestAnimationFrame that is safe everywhere: falls back to a timeout and
+   * never runs after teardown (the DOM may be gone by then).
+   */
+  frame(callback) {
+    if (!this.alive) return;
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, 16);
+    schedule(() => {
+      if (!this.alive) return;
+      try {
+        callback();
+      } catch { /* never let an animation break the game */ }
+    });
+  }
+
   refreshTables() {
     if (STANDALONE) {
       $('#pill-connection').textContent = '● Offline build';
@@ -4976,8 +5876,14 @@ class App {
       return;
     }
     if (!this.online) {
-      fetch('/api/tables').then((res) => res.json()).then((data) => this.renderTables(data.tables || [])).catch(() => {});
-      fetch('/api/leaderboard').then((res) => res.json()).then((data) => this.renderLeaderboard(data.leaderboard || [])).catch(() => {});
+      fetch('/api/tables')
+        .then((res) => res.json())
+        .then((data) => { if (this.alive) this.renderTables(data.tables || []); })
+        .catch(() => {});
+      fetch('/api/leaderboard')
+        .then((res) => res.json())
+        .then((data) => { if (this.alive) this.renderLeaderboard(data.leaderboard || []); })
+        .catch(() => {});
       return;
     }
     this.online.requestTables();
@@ -5006,6 +5912,9 @@ class App {
   }
 
   teardown() {
+    this.disposed = true;
+    this.animating = false;
+    this.sound.stopPending();
     this.controller?.stop?.();
     this.controller = null;
     if (this.online) {
@@ -5141,11 +6050,37 @@ class App {
       }
     })));
 
+    const volumeSlider = el('input', {
+      type: 'range',
+      min: '0',
+      max: '100',
+      value: String(Math.round((s.volume ?? 0.8) * 100)),
+      style: { width: '130px' },
+      oninput: (event) => {
+        const value = Number(event.target.value) / 100;
+        this.store.setSetting('volume', value);
+        this.sound.setVolume(value);
+      },
+      onchange: () => this.sound.chipStack(2)
+    });
+
     const body = [
       toggleRow('Sound effects', 'Card deals, chips, wins and losses', 'sound', (value) => {
         this.sound.setEnabled(value);
         this.syncTopButtons();
+        if (value) this.sound.unlock();
+        else this.hideSoundHint();
       }),
+      toggleRow('Casino ambience', 'Quiet room tone and distant chip clinks', 'ambience', (value) => {
+        this.sound.setAmbience(value);
+      }),
+      el('div', { class: 'setting-row' }, [
+        el('div', { class: 'label' }, [el('b', { text: 'Volume' }), el('span', { text: this.sound.state.available ? 'Drag to taste' : 'Tap the page once to enable audio' })]),
+        el('div', { class: 'row' }, [
+          volumeSlider,
+          el('button', { class: 'btn small', text: '🔔 Test', onclick: () => { this.sound.unlock(); this.sound.win(); } })
+        ])
+      ]),
       toggleRow('Strategy hints', 'Show hand strength advice under your cards', 'hints'),
       toggleRow('Auto top-up (practice)', 'Bots and you refill when a stack busts', 'autoRebuy'),
       el('div', { class: 'setting-row' }, [

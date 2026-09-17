@@ -155,7 +155,8 @@ export function closeTopModal() {
 
 /** A shareable link the host can hand to friends (falls back to the current URL). */
 export function inviteLink(tableId) {
-  const url = new URL(window.location.href);
+  const href = typeof window !== 'undefined' ? window.location.href : 'http://localhost:4000/';
+  const url = new URL(href);
   url.searchParams.set('table', tableId);
   return url.toString();
 }

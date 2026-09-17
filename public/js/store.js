@@ -17,7 +17,8 @@ const DEFAULTS = {
   },
   settings: {
     sound: true,
-    music: false,
+    ambience: true,
+    volume: 0.8,
     animations: 'normal',      // slow | normal | fast
     theme: 'dark',
     hints: true,               // show the "what should I do" helper

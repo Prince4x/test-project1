@@ -56,6 +56,9 @@ export class GameView {
     this.lastWinner = null;
     this.raiseValue = 0;
     this.spectating = false;
+    this.destroyed = false;
+    /** Animating DOM nodes (flying chips, sparkles) are cleaned up on destroy. */
+    this.viewTimers = new Set();
   }
 
   mount() {
@@ -146,6 +149,11 @@ export class GameView {
       this.els.potDisplay.classList.add('bump');
     }
     this.renderPotChips(snapshot.pot);
+    if (snapshot.you?.isTurn && this.lastTurnAnnounced !== snapshot.turnDeadline) {
+      this.lastTurnAnnounced = snapshot.turnDeadline;
+      this.lastTickSecond = null;
+      this.sound.turn();
+    }
     this.renderSeats(snapshot);
     this.renderMyArea(snapshot);
     this.renderActionBar(snapshot);
@@ -637,13 +645,18 @@ export class GameView {
         bar.style.stroke = fraction < 0.25 ? 'var(--red)' : 'var(--gold)';
       }
       const isMe = this.snapshot.you?.isTurn;
+      const seconds = Math.ceil(remaining / 1000);
       const waiting = this.els.actionBar.querySelector('.turn-banner span:last-child');
       if (waiting && isMe === false) {
-        waiting.textContent = `${turnSeat.isBot ? '🤖 ' : ''}${turnSeat.name} is thinking… ${Math.ceil(remaining / 1000)}s`;
+        waiting.textContent = `${turnSeat.isBot ? '🤖 ' : ''}${turnSeat.name} is thinking… ${seconds}s`;
       }
-      if (isMe) {
-        const heading = this.els.actionBar.querySelector('.turn-banner');
-        if (heading) heading.textContent = '';
+      // Audible clock for your own turn: a soft tick each second, then a warning.
+      if (isMe && seconds !== this.lastTickSecond) {
+        this.lastTickSecond = seconds;
+        if (seconds <= 5 && seconds > 0) {
+          this.sound.tick(seconds);
+          if (seconds === 5) this.sound.warning();
+        }
       }
       if (remaining <= 0) this.stopCountdown();
     };
@@ -715,20 +728,26 @@ export class GameView {
         this.sound.fold();
         break;
       case 'allin':
-        this.sound.chipStack(4);
+        this.sound.allIn();
         this.flyChips(node.el, Math.min(6, 2 + Math.floor((event.amount || 0) / 50)));
         break;
       case 'raise':
-        this.sound.chip();
+        this.sound.raise();
         this.flyChips(node.el, 3);
         break;
       case 'chaal':
       case 'blind':
-        this.sound.chip();
+        this.sound.call();
         this.flyChips(node.el, 1);
+        break;
+      case 'check':
+        this.sound.check();
         break;
       case 'see':
         this.sound.flip();
+        break;
+      case 'show':
+        this.sound.show();
         break;
       default:
         break;
@@ -773,8 +792,10 @@ export class GameView {
     const snapshot = this.snapshot;
     const myWinner = event.winners.find((winner) => winner.id === snapshot?.you?.id);
     if (myWinner) {
-      this.sound.win();
-      this.sparkle();
+      // A pot worth more than 8x the boot gets the full coin-shower fanfare.
+      const big = Boolean(snapshot?.config?.boot && event.pot >= snapshot.config.boot * 8);
+      this.sound.win(big);
+      this.sparkle(big ? 22 : 12);
     } else {
       this.sound.lose();
     }
@@ -786,8 +807,8 @@ export class GameView {
         el('div', { class: 'sub', text: event.reason === 'fold' ? 'everyone else packed' : `pot ${formatChips(event.pot)}` })
       ]);
       this.els.winnerHost.replaceChildren(banner);
-      setTimeout(() => {
-        if (this.els.winnerHost.contains(banner)) banner.remove();
+      this.later(() => {
+        if (this.els.winnerHost?.contains(banner)) banner.remove();
       }, 4200);
     }
     this.showShowdownCards();
@@ -817,6 +838,33 @@ export class GameView {
     });
   }
 
+  /** Safe rAF: no-op once the view is destroyed, falls back to a timeout. */
+  frame(callback) {
+    if (this.destroyed) return;
+    const schedule = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, 16);
+    schedule(() => {
+      if (this.destroyed) return;
+      try {
+        callback();
+      } catch { /* the view may be gone */ }
+    });
+  }
+
+  /** Safe timeout that is cancelled on destroy. */
+  later(callback, ms) {
+    const id = setTimeout(() => {
+      this.viewTimers.delete(id);
+      if (this.destroyed) return;
+      try {
+        callback();
+      } catch { /* the view may be gone */ }
+    }, ms);
+    this.viewTimers.add(id);
+    return id;
+  }
+
   flyChips(fromEl, count = 1) {
     const to = this.els.potDisplay.getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
@@ -826,24 +874,24 @@ export class GameView {
       chip.style.top = `${from.top + from.height / 2}px`;
       chip.style.transitionDelay = `${i * 55}ms`;
       document.body.append(chip);
-      requestAnimationFrame(() => {
+      this.frame(() => {
         chip.style.transform = `translate(${to.left + to.width / 2 - from.left - from.width / 2}px, ${to.top + to.height / 2 - from.top - from.height / 2}px) scale(0.7)`;
         chip.style.opacity = '0.9';
       });
-      setTimeout(() => chip.remove(), 800 + i * 60);
+      this.later(() => chip.remove(), 800 + i * 60);
     }
   }
 
-  sparkle() {
+  sparkle(count = 14) {
     const rect = this.els.potDisplay.getBoundingClientRect();
-    for (let i = 0; i < 14; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       const node = el('div', { class: 'sparkle', text: ['✨', '⭐', '🎉', '💫'][i % 4] });
       node.style.left = `${rect.left + rect.width / 2 + (Math.random() * 220 - 110)}px`;
       node.style.top = `${rect.top + rect.height / 2 + (Math.random() * 40 - 20)}px`;
       node.style.setProperty('--sx', `${Math.random() * 80 - 40}px`);
       node.style.animationDelay = `${i * 45}ms`;
       document.body.append(node);
-      setTimeout(() => node.remove(), 1600 + i * 50);
+      this.later(() => node.remove(), 1600 + i * 50);
     }
   }
 
@@ -888,7 +936,7 @@ export class GameView {
     const rect = seat?.el.getBoundingClientRect() || this.els.tableArea?.getBoundingClientRect() || { left: 200, top: 200, width: 0, height: 0 };
     const node = el('div', { class: 'reaction-float', text, style: { left: `${rect.left + rect.width / 2}px`, top: `${rect.top}px` } });
     document.body.append(node);
-    setTimeout(() => node.remove(), 1600);
+    this.later(() => node.remove(), 1600);
   }
 
   // ─────────────────────────────────────────────────────────────── plumbing ──
@@ -910,7 +958,12 @@ export class GameView {
   }
 
   destroy() {
+    this.destroyed = true;
     this.stopCountdown();
+    for (const id of this.viewTimers) clearTimeout(id);
+    this.viewTimers.clear();
+    // Cancel any queued cue (coin showers, chip tails) so nothing fires later.
+    this.sound.stopPending?.();
     this.seats.clear();
     this.els?.seats?.replaceChildren();
     this.els?.winnerHost?.replaceChildren();

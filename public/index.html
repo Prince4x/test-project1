@@ -10,67 +10,105 @@
 </head>
 <body data-theme="dark">
 
-<!-- ══════════════════════════════════ LOBBY ══════════════════════════════════ -->
+<!-- ══════════════════════════════ CASINO LOBBY ══════════════════════════════ -->
 <section id="lobby" class="screen active">
-  <header class="lobby-top">
+
+  <!-- stage dressing: spotlights, bokeh, velvet -->
+  <div class="casino-bg" aria-hidden="true">
+    <div class="spotlight s1"></div>
+    <div class="spotlight s2"></div>
+    <div class="bokeh b1"></div><div class="bokeh b2"></div><div class="bokeh b3"></div>
+    <div class="bokeh b4"></div><div class="bokeh b5"></div><div class="bokeh b6"></div>
+    <div class="velvet-top"></div>
+    <div class="casino-vignette"></div>
+  </div>
+
+  <header class="casino-top">
     <div class="brand">
-      <div class="logo">🎴</div>
-      <div>
-        <h1>Teen Patti <span>Arena</span></h1>
-        <p>Indian Poker · Trail beats everything</p>
+      <div class="logo"><span>♠</span></div>
+      <div class="brand-text">
+        <h1>Teen Patti <em>Arena</em></h1>
+        <p>Indian Poker · 3 cards · Trail beats everything</p>
       </div>
     </div>
     <div class="spacer"></div>
-    <div class="row" id="profile-chip"></div>
-    <button class="btn icon" id="btn-sound" title="Sound on/off">🔊</button>
-    <button class="btn icon" id="btn-theme" title="Light / dark felt">🌙</button>
-    <button class="btn icon" id="btn-settings" title="Settings">⚙️</button>
-    <button class="btn icon" id="btn-help" title="How to play">❓</button>
+    <div id="profile-chip"></div>
+    <div class="top-bar-actions">
+      <button class="icon-btn" id="btn-sound" title="Sound effects on/off"><span>🔊</span></button>
+      <button class="icon-btn" id="btn-theme" title="Light / dark room"><span>🌙</span></button>
+      <button class="icon-btn" id="btn-settings" title="Settings"><span>⚙️</span></button>
+      <button class="icon-btn" id="btn-help" title="How to play"><span>❓</span></button>
+    </div>
   </header>
 
-  <div class="lobby-body">
-    <section class="lobby-hero card-panel">
+  <!-- sound needs one tap: this notice disappears once audio is running -->
+  <button class="sound-unlock" id="sound-unlock" hidden>🔈 Tap anywhere to switch the sound on</button>
+
+  <div class="casino-body">
+
+    <!-- ── hero: the big neon sign ─────────────────────────────── -->
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
       <div class="hero-copy">
-        <h2 id="hero-title">Welcome to the table</h2>
-        <p id="hero-copy">Choose a mode below — practise against four AI personalities, or sit down at a live table and see how far your chips travel.</p>
+        <div class="marquee-sign">
+          <span class="bulbs" aria-hidden="true"></span>
+          <h2>TEEN PATTI</h2>
+          <span class="bulbs" aria-hidden="true"></span>
+        </div>
+        <p class="hero-tag">Deal three cards. Play blind or look. Bluff your way to the pot.</p>
+        <div class="hero-actions">
+          <button class="cta primary" id="btn-practice"><span class="cta-icon">🤖</span><span>Play vs AI<small>instant · offline</small></span></button>
+          <button class="cta" id="btn-online"><span class="cta-icon">🌐</span><span>Live tables<small>real multiplayer</small></span></button>
+          <button class="cta ghost" id="btn-tutorial"><span class="cta-icon">🎓</span><span>How to play<small>2 minute tutorial</small></span></button>
+        </div>
+        <div class="hero-pills">
+          <span class="mini-pill gold" id="pill-connection">● Offline</span>
+          <span class="mini-pill" id="pill-tables">0 tables</span>
+          <span class="mini-pill" id="pill-jackpot">🏆 Biggest pot <b id="jackpot-value">0</b></span>
+        </div>
       </div>
-      <div class="spacer"></div>
-      <div class="row wrap">
-        <span class="pill gold" id="pill-connection">● Offline</span>
-        <span class="pill" id="pill-tables">0 tables</span>
+
+      <div class="hero-art" aria-hidden="true">
+        <div class="chip-stack-art">
+          <span class="art-chip c100"></span><span class="art-chip c500"></span>
+          <span class="art-chip c50"></span><span class="art-chip c10"></span><span class="art-chip c5"></span>
+        </div>
+        <div class="card-fan">
+          <div class="fan-card f1"><b>A</b><i>♠</i></div>
+          <div class="fan-card f2"><b>K</b><i>♥</i></div>
+          <div class="fan-card f3"><b>Q</b><i>♦</i></div>
+        </div>
+        <div class="hero-badge">♠ ♥ ♣ ♦</div>
       </div>
     </section>
 
-    <div class="lobby-grid">
-      <!-- play -->
-      <section class="panel card-panel">
-        <header><span class="icon">🎯</span><h3>Play now</h3></header>
-        <div class="mode-cards">
-          <button class="mode-card" id="btn-practice">
-            <span class="emoji">🤖</span>
-            <span>
-              <strong>Practice vs AI</strong>
-              <span>Instant game against four bot personalities. No connection needed, chips refill automatically.</span>
-            </span>
-          </button>
-          <button class="mode-card" id="btn-online">
-            <span class="emoji">🌐</span>
-            <span>
-              <strong>Live table (multiplayer)</strong>
-              <span>Real-time table with chat — invite friends, or play alongside AI regulars while you wait.</span>
-            </span>
-          </button>
-          <button class="mode-card" id="btn-tutorial">
-            <span class="emoji">🎓</span>
-            <span>
-              <strong>Tutorial</strong>
-              <span>Learn Blind vs Seen play, Chaal, Side Show and hand rankings in two minutes.</span>
-            </span>
-          </button>
-        </div>
+    <!-- ── ticker ─────────────────────────────────────────────── -->
+    <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker-track"></div></div>
 
-        <details class="tiny" id="practice-options">
-          <summary class="muted" style="cursor:pointer">Practice settings</summary>
+    <!-- ── main grid ──────────────────────────────────────────── -->
+    <div class="casino-grid">
+
+      <!-- house tables -->
+      <section class="panel table-panel">
+        <header>
+          <span class="panel-icon">🎴</span>
+          <h3>House tables</h3>
+          <div class="spacer"></div>
+          <button class="chip-btn" id="btn-refresh" title="Refresh the table list">↻</button>
+        </header>
+        <div class="table-list" id="table-list"><p class="muted tiny">Looking for tables…</p></div>
+        <button class="cta small" id="btn-create"><span class="cta-icon">＋</span><span>Create your own table<small>invite friends with a link</small></span></button>
+      </section>
+
+      <!-- your stats -->
+      <section class="panel stats-panel">
+        <header><span class="panel-icon">📈</span><h3>Your play</h3></header>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="row wrap">
+          <span class="mini-pill" id="pill-best-hand">Best hand: —</span>
+        </div>
+        <details class="practice-options" id="practice-options">
+          <summary>Practice table settings</summary>
           <div class="split" style="margin-top:12px">
             <div class="field">
               <label for="practice-players">Players at the table</label>
@@ -92,7 +130,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="practice-rounds">Betting rounds before compulsory show</label>
+              <label for="practice-rounds">Betting rounds</label>
               <select id="practice-rounds">
                 <option value="2">2 rounds</option>
                 <option value="3">3 rounds</option>
@@ -113,33 +151,31 @@
         </details>
       </section>
 
-      <!-- tables -->
-      <section class="panel card-panel">
-        <header><span class="icon">🃏</span><h3>Live tables</h3><div class="spacer"></div>
-          <button class="btn small ghost" id="btn-refresh">↻ Refresh</button>
-        </header>
-        <div class="table-list" id="table-list"><p class="muted tiny">Looking for tables…</p></div>
-        <button class="btn primary" id="btn-create">＋ Create your own table</button>
-      </section>
-
-      <!-- stats + leaderboard -->
-      <section class="panel card-panel">
-        <header><span class="icon">📈</span><h3>Your statistics</h3></header>
-        <div class="stat-grid" id="stat-grid"></div>
-        <div class="row"><span class="pill" id="pill-best-hand">Best hand: —</span></div>
-        <header style="margin-top:6px"><span class="icon">🏆</span><h3>Leaderboard</h3></header>
+      <!-- leaderboard -->
+      <section class="panel board-panel">
+        <header><span class="panel-icon">🏆</span><h3>High rollers</h3></header>
         <div class="board" id="leaderboard"><p class="muted tiny">Play a hand to appear here.</p></div>
-        <button class="btn small ghost" id="btn-reset-stats">Reset my statistics</button>
+        <button class="chip-btn wide" id="btn-reset-stats">Reset my statistics</button>
       </section>
 
-      <!-- rules -->
-      <section class="panel card-panel" style="grid-column: 1 / -1">
-        <header><span class="icon">📜</span><h3>Hand rankings — strongest to weakest</h3>
-          <div class="spacer"></div><span class="pill gold">Trail &gt; Pure Sequence &gt; Sequence &gt; Colour &gt; Pair &gt; High Card</span>
+      <!-- rankings -->
+      <section class="panel rankings-panel">
+        <header>
+          <span class="panel-icon">📜</span><h3>Hand rankings</h3>
+          <div class="spacer"></div>
+          <span class="mini-pill gold">strongest → weakest</span>
         </header>
         <div class="rank-chart" id="rank-chart"></div>
       </section>
     </div>
+
+    <footer class="casino-foot">
+      <span>🎴 Teen Patti Arena</span>
+      <span class="dot">·</span>
+      <span>Play money only — no real wagering</span>
+      <span class="dot">·</span>
+      <span>MIT licensed</span>
+    </footer>
   </div>
 </section>
 
