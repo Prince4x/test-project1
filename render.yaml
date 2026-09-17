@@ -1,0 +1,24 @@
+# Render.com blueprint — one-click deploy for internet play with friends.
+#
+#   1. Push this repo to GitHub.
+#   2. Render → New → Blueprint → pick the repo.
+#   3. Render gives you a URL like https://teen-patti-arena.onrender.com —
+#      share it and your friends can join from anywhere.
+#
+# PUBLIC_URL makes the lobby hand out the correct invite links.
+
+services:
+  - type: web
+    name: teen-patti-arena
+    runtime: node
+    plan: free
+    buildCommand: "echo no build step — zero dependencies"
+    startCommand: "node server/index.js"
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC_URL
+        sync: false          # set this to your Render URL after the first deploy

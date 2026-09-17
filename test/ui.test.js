@@ -73,6 +73,66 @@ test('index.html only references assets that exist', () => {
   assert.ok(html.includes('type="module"'), 'the client boots from an ES module');
 });
 
+test('each browser tab gets its own seat (two tabs = two players)', { skip: !JSDOM }, async () => {
+  const sharedLocal = new Map();
+  const sharedLocalStorage = {
+    getItem: (key) => (sharedLocal.has(key) ? sharedLocal.get(key) : null),
+    setItem: (key, value) => sharedLocal.set(key, String(value)),
+    removeItem: (key) => sharedLocal.delete(key)
+  };
+
+  const sessionFor = (suffix) => {
+    const values = new Map();
+    if (suffix) values.set('teen-patti-arena/tab', suffix);
+    return {
+      getItem: (key) => (values.has(key) ? values.get(key) : null),
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+      values
+    };
+  };
+
+  const previous = new Map();
+  const expose = (key, value) => {
+    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  };
+  expose('localStorage', sharedLocalStorage);
+
+  try {
+    const { Store } = await import('../public/js/store.js');
+
+    // Same browser profile (shared localStorage), two different tabs.
+    expose('sessionStorage', sessionFor(null));
+    const tabA = new Store();
+    expose('sessionStorage', sessionFor(null));
+    const tabB = new Store();
+
+    assert.equal(tabA.profile.id, tabB.profile.id, 'both tabs share the same identity');
+    assert.notEqual(tabA.playerId, tabB.playerId, 'but they get different seats');
+    assert.ok(tabA.playerId.startsWith(tabA.profile.id), 'the seat id derives from the identity');
+
+    // A reload in the same tab keeps its seat (sessionStorage survives).
+    const firstSeat = tabA.playerId;
+    expose('sessionStorage', sessionFor(tabA.playerId.split('-').pop()));
+    const reloaded = new Store();
+    assert.equal(reloaded.playerId, firstSeat, 'reloading a tab keeps its seat — reconnects work');
+
+    // The socket connects as the seat, not as the bare identity.
+    if (typeof window !== 'undefined') {
+      const { OnlineController } = await import('../public/js/net.js');
+      const controller = new OnlineController({ profile: { id: 'identity-1', seatId: 'identity-1-abcd', name: 'T', avatar: '🙂' } });
+      assert.match(controller.url, /profile=identity-1-abcd/, 'the socket claims the tab seat');
+      assert.equal(controller.seatId, 'identity-1-abcd');
+    }
+  } finally {
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  }
+});
+
 test('the client modules and app shell load in a DOM', { skip: !JSDOM, timeout: 120000 }, async () => {
   const dom = new JSDOM(fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8'), {
     url: 'http://localhost:4000/',
@@ -233,6 +293,39 @@ test('the client modules and app shell load in a DOM', { skip: !JSDOM, timeout: 
     appInstance.openTutorial();
     assert.ok(document.querySelector('.modal'), 'tutorial modal opens');
     appInstance.view.closeDrawers();
+
+    // ── sharing / multiplayer plumbing ──
+    const { inviteLink, isLocalHost } = await import('../public/js/ui.js');
+    assert.equal(isLocalHost(), true, 'jsdom runs on localhost');
+    assert.equal(
+      inviteLink('t123', 'http://192.168.1.24:4000'),
+      'http://192.168.1.24:4000/?table=t123',
+      'the invite link is built on the LAN address, not localhost'
+    );
+    assert.equal(
+      new URL(inviteLink('t123', 'https://cards.example.com/abc')).searchParams.get('table'),
+      't123',
+      'the invite link keeps the table id on any base'
+    );
+
+    // The lobby advertises a shareable address (server-reported LAN IP here).
+    appInstance.network = {
+      port: 4000,
+      local: 'http://localhost:4000',
+      addresses: [{ label: 'Wi-Fi', ip: '192.168.1.24', url: 'http://192.168.1.24:4000' }],
+      primary: 'http://192.168.1.24:4000',
+      publicUrl: null
+    };
+    appInstance.renderShareBar();
+    const shareBar = document.querySelector('#share-bar');
+    assert.equal(shareBar.hidden, false, 'the share bar is visible on the host machine');
+    assert.match(shareBar.textContent, /192\.168\.1\.24:4000/, 'it shows the LAN address a friend can use');
+    assert.equal(appInstance.inviteBase(), 'http://192.168.1.24:4000', 'invite base prefers the LAN address');
+
+    // Deployed (PUBLIC_URL) wins over the LAN address.
+    appInstance.network.publicUrl = 'https://cards.example.com';
+    assert.equal(appInstance.inviteBase(), 'https://cards.example.com', 'a deployed public URL wins');
+
     appInstance.teardown();
   } finally {
     for (const [key, descriptor] of previous) {

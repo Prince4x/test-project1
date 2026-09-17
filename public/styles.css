@@ -1075,3 +1075,28 @@ body[data-theme='light'] .panel { background: linear-gradient(180deg, #fff, #f6f
   .hero { padding: 20px 18px; }
   .ticker-track { font-size: 11px; gap: 26px; }
 }
+
+/* ── multiplayer sharing ─────────────────────────────────────── */
+
+.share-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px; padding: 10px 14px; border-radius: 14px;
+  border: 1px dashed rgba(245, 196, 81, 0.45);
+  background: linear-gradient(120deg, rgba(245,196,81,0.12), rgba(255,255,255,0.02));
+}
+.share-bar .share-label { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
+.share-bar .share-url {
+  font-family: 'SF Mono', ui-monospace, monospace; font-size: 13px;
+  padding: 5px 10px; border-radius: 9px;
+  background: rgba(0,0,0,0.35); color: var(--gold);
+  border: 1px solid rgba(245,196,81,0.25); user-select: all;
+}
+body[data-theme='light'] .share-bar .share-url { background: #fff; }
+@media (max-width: 900px) { .share-bar { justify-content: center; text-align: center; } }
+
+.invite-row { display: flex; flex-direction: column; gap: 7px; padding: 12px; border-radius: 13px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); }
+.invite-head { display: flex; flex-direction: column; gap: 2px; }
+.invite-head b { font-size: 13.5px; }
+.invite-note, .invite-steps { padding: 12px; border-radius: 13px; border: 1px dashed var(--border); background: rgba(88,166,255,0.06); }
+.invite-steps { background: rgba(255,255,255,0.03); }
+.invite-steps .rule-list { margin-top: 6px; }

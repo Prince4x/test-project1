@@ -83,6 +83,52 @@ Teen Patti is a **three-card** game (no community cards), so the felt shows the 
 
 ---
 
+## Play with friends
+
+Teen Patti needs one shared dealer, so one of you runs the server and everybody else connects to it.
+
+### Same Wi-Fi (easiest — phone + laptop at home)
+
+1. On your PC, start the game: `node server/index.js` (or double-click `START-WINDOWS.bat`).
+2. The startup banner prints the address to share, e.g.
+   ```
+   This PC        http://localhost:4000
+   Same Wi-Fi     http://192.168.1.24:4000   (Wi-Fi)
+   ```
+3. Send that **Same Wi-Fi** link to your friend — or copy it from the lobby, where the same address is shown under the play buttons.
+4. Your friend opens it, presses **Sit down** on your table, and you both play. Chat, reactions and every bet are shared live.
+
+Notes:
+- **Windows Firewall** asks the first time Node listens on the network — click *Allow access* (Private networks). If it was already blocked, allow `node.exe` under *Windows Defender Firewall → Allow an app*.
+- Both devices must be on the same network (same router). Guest Wi-Fi networks often isolate devices from each other.
+- The invite link inside a table (`💬 → 🔗 Invite`) builds itself from whichever address is reachable, so it is safe to copy and send.
+
+### Different networks (friends elsewhere)
+
+A `192.168.x.x` address only exists on your home network. Two ways to bridge that:
+
+**A. Temporary tunnel** — no deploy, works in seconds:
+
+```bash
+# install once: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+cloudflared tunnel --url http://localhost:4000
+# prints a public https://…trycloudflare.com URL — send that to your friends
+```
+
+`ngrok http 4000` or `tailscale funnel 4000` do the same job. WebSockets work over all of them (the client picks `wss://` automatically on HTTPS).
+
+**B. Deploy it** — permanent, free-tier friendly, and the server is a single file with zero dependencies:
+
+```bash
+docker build -t teen-patti . && docker run -p 4000:4000 teen-patti     # any Docker host
+```
+
+Or use the included `render.yaml` (Render → New → Blueprint → pick this repo). After the first deploy set `PUBLIC_URL=https://your-app.onrender.com` so the lobby hands out the right invite links. Railway, Fly.io and Glitch work the same way: start command `node server/index.js`, port from `$PORT`.
+
+### Playing from two windows on one PC
+
+Each browser **tab** gets its own seat, so you can open two windows and play yourself — handy for testing a table before friends arrive. (A fresh tab is a fresh player; a reload in the same tab keeps its seat.)
+
 ## Architecture
 
 ```
@@ -120,6 +166,7 @@ test/                engine, server, protocol, end-to-end and DOM tests
 | --- | --- |
 | `GET /api/health` | liveness + table/client counts |
 | `GET /api/config` | default table config and bot personalities |
+| `GET /api/network` | local, LAN and public addresses the lobby uses for invite links |
 | `GET /api/tables` | list public tables |
 | `POST /api/tables` | create a table (`{ name, bots, config }`) |
 | `GET /api/tables/:id` | table detail + recent log |
@@ -151,6 +198,7 @@ npm run test:engine
 | `e2e.test.js` | boots the real server, a real WebSocket client joins a table, plays multiple hands, chats and leaves |
 | `ui.test.js` | resolves the browser module graph, then boots the real client modules in jsdom: renders seats/pot/action bar, plays hands through the UI, opens drawers, mounts the app shell |
 | `online-ui.test.js` | the online equivalent: the real app boots in a DOM, connects to a real server over a real WebSocket, sits down, plays a hand, chats and leaves |
+| `two-devices.test.js` | two independent clients with separate identities sit at one table, see each other, get dealt in, play a hand, chat across devices, and one leaves mid-game |
 | `standalone.test.js` | builds the single-file version, then loads it in a script-enabled DOM: lobby renders, practice mode deals and a hand completes with zero script errors |
 
 The two DOM suites need the dev dependency (`npm install`) and skip themselves when jsdom is absent, so the runtime stays dependency-free.

@@ -37,9 +37,14 @@ export class OnlineController {
 
   get isOnline() { return true; }
 
+  /** The seat this connection claims (per-tab, so two tabs are two players). */
+  get seatId() {
+    return this.profile.seatId || this.profile.id;
+  }
+
   get url() {
     const { protocol, host } = (typeof window !== 'undefined' ? window : {}).location || { protocol: 'http:', host: 'localhost' };
-    return `${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}/ws?profile=${encodeURIComponent(this.profile.id)}`;
+    return `${protocol === 'https:' ? 'wss:' : 'ws:'}//${host}/ws?profile=${encodeURIComponent(this.seatId)}`;
   }
 
   connect() {

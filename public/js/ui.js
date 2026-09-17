@@ -153,12 +153,25 @@ export function closeTopModal() {
   return true;
 }
 
-/** A shareable link the host can hand to friends (falls back to the current URL). */
-export function inviteLink(tableId) {
-  const href = typeof window !== 'undefined' ? window.location.href : 'http://localhost:4000/';
-  const url = new URL(href);
+/**
+ * A shareable link for a table.
+ * @param {string} tableId
+ * @param {string} [base] origin to build it on — pass the LAN/public address
+ *        when the host is browsing on localhost, otherwise the friend would
+ *        receive a link to their own machine.
+ */
+export function inviteLink(tableId, base) {
+  const href = base || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4000');
+  const url = new URL(href, 'http://localhost:4000');
   url.searchParams.set('table', tableId);
   return url.toString();
+}
+
+/** True when the page is being viewed on the host machine itself. */
+export function isLocalHost() {
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
 }
 
 export function copyToClipboard(text) {

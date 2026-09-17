@@ -7,6 +7,7 @@
 
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachWebSocketServer } from './ws.js';
@@ -54,6 +55,31 @@ function resolveStatic(pathname) {
     if (fs.existsSync(target) && fs.statSync(target).isFile()) return target;
   }
   return null;
+}
+
+/**
+ * Every address a friend could actually type: localhost for this PC, plus the
+ * LAN addresses (so somebody on the same Wi-Fi can join), plus PUBLIC_URL when
+ * the app is deployed behind a domain or tunnel.
+ */
+function networkInfo(port) {
+  const addresses = [];
+  for (const [name, entries] of Object.entries(os.networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family !== 'IPv4' || entry.internal) continue;
+      addresses.push({ label: name, ip: entry.address, url: `http://${entry.address}:${port}` });
+    }
+  }
+  const publicUrl = (process.env.PUBLIC_URL || '').replace(/\/$/, '') || null;
+  return {
+    port,
+    hostname: os.hostname(),
+    addresses,
+    /** Best link to hand to somebody on the same Wi-Fi. */
+    primary: publicUrl || addresses[0]?.url || `http://localhost:${port}`,
+    local: `http://localhost:${port}`,
+    publicUrl
+  };
 }
 
 function sendJson(res, status, body) {
@@ -113,6 +139,11 @@ const server = http.createServer(async (req, res) => {
   try {
     if (pathname === '/api/health') {
       sendJson(res, 200, { ok: true, ...rooms.stats(), tables: rooms.rooms.size });
+      return;
+    }
+
+    if (pathname === '/api/network') {
+      sendJson(res, 200, networkInfo(PORT));
       return;
     }
 
@@ -209,9 +240,26 @@ const loop = setInterval(() => rooms.tick(), 400);
 loop.unref?.();
 
 server.listen(PORT, HOST, () => {
-  console.log(`🎴 Teen Patti Arena running on http://${HOST}:${PORT}`);
-  console.log(`   engine: shared with the browser at /engine/*`);
-  console.log(`   tables: ${[...rooms.rooms.values()].map((room) => `${room.table.name} (${room.table.id})`).join(', ')}`);
+  const net = networkInfo(PORT);
+  console.log('');
+  console.log('  🎴 Teen Patti Arena is running');
+  console.log('');
+  console.log(`     This PC        ${net.local}`);
+  for (const address of net.addresses) {
+    console.log(`     Same Wi-Fi     ${address.url}   (${address.label})`);
+  }
+  if (net.publicUrl) console.log(`     Public         ${net.publicUrl}`);
+  console.log('');
+  if (net.addresses.length) {
+    console.log('  ➜ A friend on the same Wi-Fi opens the "Same Wi-Fi" link above,');
+    console.log('    sits at your table, and you press 💬 → Invite to copy the exact link.');
+  }
+  if (!net.publicUrl) {
+    console.log('  ➜ Different network? See "Play with friends" in README.md —');
+    console.log('    tunnel with cloudflared or deploy; the server is one file, no deps.');
+  }
+  console.log(`     tables         ${[...rooms.rooms.values()].map((room) => room.table.name).join(' | ')}`);
+  console.log('');
 });
 
 const shutdown = () => {

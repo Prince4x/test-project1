@@ -11,7 +11,7 @@ import { GameView } from '/js/game-view.js';
 import { RANKING_CHART, CATEGORY_LABEL } from '/engine/evaluator.js';
 import { PERSONALITIES } from '/engine/ai.js';
 import {
-  el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSigned, inviteLink, copyToClipboard
+  el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSigned, inviteLink, copyToClipboard, isLocalHost
 } from '/js/ui.js';
 
 /**
@@ -54,6 +54,70 @@ class App {
 
   // ───────────────────────────────────────────────────────────── bootstrap ──
 
+  /**
+   * Ask the server which addresses friends could use. On the host machine the
+   * browser is on localhost, so the LAN address is what actually works for
+   * somebody else's phone or laptop.
+   */
+  async loadNetwork() {
+    if (this.network) return this.network;
+    try {
+      const response = await fetch('/api/network');
+      const data = await response.json();
+      if (this.alive !== false) this.network = data;
+    } catch {
+      this.network = { addresses: [], primary: null, local: window.location.origin };
+    }
+    this.renderShareBar();
+    return this.network;
+  }
+
+  /** Best origin to hand to another person. */
+  inviteBase() {
+    const net = this.network;
+    if (net?.publicUrl) return net.publicUrl;                    // deployed / tunnel
+    if (isLocalHost() && net?.addresses?.length) return net.primary;  // host's LAN IP
+    return window.location.origin;                               // already on a reachable host
+  }
+
+  /** The lobby banner that tells you exactly what to send a friend. */
+  renderShareBar() {
+    const host = $('#share-bar');
+    if (!host) return;
+    if (STANDALONE) { host.hidden = true; return; }
+
+    const net = this.network;
+    const base = this.inviteBase();
+    const onHostMachine = isLocalHost();
+    const lines = [];
+
+    if (net?.publicUrl) {
+      lines.push(el('span', { class: 'share-label', text: '🌍 Internet play' }));
+      lines.push(el('code', { class: 'share-url', text: net.publicUrl }));
+    } else if (onHostMachine && net?.addresses?.length) {
+      lines.push(el('span', { class: 'share-label', text: '📶 Friends on your Wi-Fi open' }));
+      lines.push(el('code', { class: 'share-url', text: base }));
+      lines.push(el('span', {
+        class: 'tiny muted',
+        text: 'Same network only. For friends elsewhere, see “Play with friends” in the README (tunnel or deploy).'
+      }));
+    } else {
+      lines.push(el('span', { class: 'share-label', text: '🌐 Share this address' }));
+      lines.push(el('code', { class: 'share-url', text: base }));
+    }
+
+    const copy = el('button', {
+      class: 'chip-btn',
+      text: '📋 Copy',
+      onclick: () => {
+        copyToClipboard(base);
+        toast('Address copied — send it to your friend', { kind: 'good' });
+      }
+    });
+    host.replaceChildren(...lines, copy);
+    host.hidden = false;
+  }
+
   init() {
     this.disposed = false;
     this.applyTheme(this.store.settings.theme, { silent: true });
@@ -65,6 +129,7 @@ class App {
     this.bindLobby();
     this.bindGlobal();
     this.renderLeaderboard([]);
+    this.loadNetwork();
 
     const url = new URL(window.location.href);
     const wanted = url.searchParams.get('table');
@@ -424,8 +489,8 @@ class App {
 
   recordOnlineHand(info) {
     if (!info.results) return;
-    const ranking = info.results.rankings?.find((entry) => entry.id === this.store.profile.id);
-    const me = this.view.snapshot?.seats?.find((seat) => seat?.id === this.store.profile.id);
+    const ranking = info.results.rankings?.find((entry) => entry.id === this.store.playerId);
+    const me = this.view.snapshot?.seats?.find((seat) => seat?.id === this.store.playerId);
     this.store.recordHand({
       won: info.won,
       amount: info.amount,
@@ -546,40 +611,64 @@ class App {
   showInvite() {
     const tableId = this.view.snapshot?.tableId;
     if (!tableId) return;
-    const link = inviteLink(tableId);
+    const wifiLink = inviteLink(tableId, this.inviteBase());
+    const localLink = inviteLink(tableId, this.network?.local || window.location.origin);
+    const onHostMachine = isLocalHost();
+    const field = (value) => el('input', {
+      value,
+      readOnly: true,
+      style: { padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)', fontSize: '13px' }
+    });
+
+    const copyRow = (label, value, note) => el('div', { class: 'invite-row' }, [
+      el('div', { class: 'invite-head' }, [
+        el('b', { text: label }),
+        note ? el('span', { class: 'tiny muted', text: note }) : null
+      ]),
+      el('div', { class: 'row' }, [
+        field(value),
+        el('button', {
+          class: 'btn small primary',
+          text: 'Copy',
+          onclick: () => { copyToClipboard(value); toast('Link copied', { kind: 'good' }); }
+        })
+      ])
+    ]);
+
+    const body = [];
+
+    if (this.network?.publicUrl) {
+      body.push(copyRow('🌍 Public link (works anywhere)', wifiLink, 'Your friend opens this and sits down at your table.'));
+    } else if (onHostMachine) {
+      body.push(copyRow('📶 Same Wi-Fi link — send this one', wifiLink, 'Works for phones and laptops on your home network.'));
+      body.push(copyRow('🖥️ This PC only', localLink, 'Only useful for a second browser window on this machine.'));
+      body.push(el('div', { class: 'invite-note' }, [
+        el('b', { text: 'Friend on a different network?' }),
+        el('p', { class: 'tiny muted', style: { margin: '4px 0 0' }, text:
+          'Home Wi-Fi links cannot be reached from outside. Either put both of you on the same Wi-Fi, or share your PC over the internet with a tunnel (cloudflared tunnel --url http://localhost:4000) or deploy the server — README → “Play with friends”.' })
+      ]));
+    } else {
+      body.push(copyRow('🔗 Invite link', wifiLink, 'Anyone with this link can sit at your table.'));
+    }
+
+    body.push(el('div', { class: 'invite-steps' }, [
+      el('b', { text: 'How it works' }),
+      el('ol', { class: 'rule-list tiny' }, [
+        el('li', { text: 'Send the link. Your friend opens it — the game seats them at this table automatically.' }),
+        el('li', { text: 'Both of you press “Sit down” if you are not seated yet.' }),
+        el('li', { text: 'Empty seats can be filled with AI players so the table always has action.' }),
+        el('li', { text: 'Chat and reactions are shared live; the server deals the cards, so nobody can peek.' })
+      ])
+    ]));
+
     openModal({
-      title: 'Invite players',
+      title: 'Invite players to this table',
       icon: '🔗',
-      body: [
-        el('p', { class: 'muted', text: 'Anyone opening this link sits at your table with their own chips.' }),
-        el('input', { value: link, readOnly: true, style: { padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)' } })
-      ],
+      body,
       actions: [
         { label: 'Add AI player', onClick: () => { this.online?.fillWithBots(1); } },
-        { label: 'Copy link', kind: 'primary', onClick: () => { copyToClipboard(link); toast('Invite link copied', { kind: 'good' }); } }
+        { label: 'Done', kind: 'primary' }
       ]
-    });
-  }
-
-  /** True while the app's DOM is still attached (false after teardown/close). */
-  get alive() {
-    return !this.disposed;
-  }
-
-  /**
-   * requestAnimationFrame that is safe everywhere: falls back to a timeout and
-   * never runs after teardown (the DOM may be gone by then).
-   */
-  frame(callback) {
-    if (!this.alive) return;
-    const schedule = typeof requestAnimationFrame === 'function'
-      ? requestAnimationFrame
-      : (fn) => setTimeout(fn, 16);
-    schedule(() => {
-      if (!this.alive) return;
-      try {
-        callback();
-      } catch { /* never let an animation break the game */ }
     });
   }
 
@@ -843,8 +932,11 @@ class App {
 
     if (this.mode === 'online') {
       body.push(el('div', { class: 'setting-row' }, [
-        el('div', { class: 'label' }, [el('b', { text: 'Invite friends' }), el('span', { text: 'Copy a link to this table' })]),
-        el('button', { class: 'btn small', text: '🔗 Invite', onclick: () => this.showInvite() })
+        el('div', { class: 'label' }, [
+          el('b', { text: 'Invite friends' }),
+          el('span', { text: this.network?.publicUrl ? 'Share the public link' : 'Copy a link they can open' })
+        ]),
+        el('button', { class: 'btn small primary', text: '🔗 Invite', onclick: () => this.showInvite() })
       ]));
     }
 
