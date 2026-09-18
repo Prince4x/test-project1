@@ -57,8 +57,22 @@ export class GameView {
     this.raiseValue = 0;
     this.spectating = false;
     this.destroyed = false;
-    /** Animating DOM nodes (flying chips, sparkles) are cleaned up on destroy. */
+    /** Pending timeouts, cancelled when the table closes. */
     this.viewTimers = new Set();
+    /**
+     * Nodes we drop straight onto <body> so they can fly across the whole
+     * screen (chips, sparkles, emoji). Everything else on the table lives
+     * inside the table screen and disappears with it — these do not, so they
+     * are tracked and removed by hand when the table closes.
+     */
+    this.floaters = new Set();
+    /**
+     * Per-seat card animation state, keyed by player id. This deliberately does
+     * NOT live on the seat's DOM node: the ring is rebuilt from scratch whenever
+     * somebody joins or leaves, and state kept on a node dies with it — which
+     * made every already-visible hand deal and flip itself again mid-hand.
+     */
+    this.seatAnim = new Map();
   }
 
   mount() {
@@ -114,6 +128,15 @@ export class GameView {
     this.controller = controller;
     this.seatShells = [];
     this.seats.clear();
+    // Starting a game wipes the slate: teardown() ran when the last table
+    // closed, which stopped animations and cleared the seats. Without this the
+    // freshly opened table would draw no seats at all (the old signature still
+    // matched) and would never animate (destroyed was still true).
+    this.destroyed = false;
+    this.seatSignature = null;
+    this.snapshot = null;
+    this.seatAnim = new Map();
+    this.clearFloaters();
     this.els.seats.replaceChildren();
     this.chatLog = [];
     this.els.chatBody.replaceChildren();
@@ -192,6 +215,12 @@ export class GameView {
   renderSeats(snapshot) {
     const ring = this.ringFor(snapshot);
     const signature = ring.map((entry) => entry.seat.id).join('|');
+
+    // Forget card-animation state for players who have left the table.
+    if (this.seatAnim.size) {
+      const present = new Set(ring.map((entry) => entry.seat.id));
+      for (const id of [...this.seatAnim.keys()]) if (!present.has(id)) this.seatAnim.delete(id);
+    }
     if (signature !== this.seatSignature) {
       this.seatSignature = signature;
       this.seats.clear();
@@ -245,16 +274,17 @@ export class GameView {
 
       // cards
       const faces = seat.cards || [];
-      const previousCount = node.prev?.faceCount ?? 0;
-      const previousPacked = node.prev?.packed;
+      const previousCount = this.seatAnim.get(seat.id)?.faceCount ?? 0;
       node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previousCount));
       node.refs.hand.hidden = !seat.inHand || (seat.packed && !faces.length);
+      // A folded hand greys out at the showdown. Derived from state rather than
+      // from the transition, so it survives a rebuild and never sticks around
+      // into the next hand.
+      node.refs.hand.classList.toggle('dim', Boolean(seat.packed) && snapshot.phase === PHASE.SETTLED);
       if (faces.length === 3 && previousCount < 3) {
         this.sound.flip();
       }
-      if (seat.packed && !previousPacked && previousCount >= 0 && snapshot.phase === PHASE.SETTLED) {
-        node.refs.hand.classList.add('dim');
-      }
+      this.seatAnim.set(seat.id, { faceCount: faces.length, packed: seat.packed });
 
       // status line under the seat
       let status = '';
@@ -268,7 +298,6 @@ export class GameView {
 
       // turn ring (SVG has no `hidden` property — toggle display instead)
       node.refs.ring.style.display = seat.isTurn ? '' : 'none';
-      node.prev = { faceCount: faces.length, packed: seat.packed };
     }
 
     // empty seat actions (practice: add bots; online: invite)
@@ -865,6 +894,28 @@ export class GameView {
     return id;
   }
 
+  /**
+   * Add a node to <body> that must not outlive the table. Chips, sparkles and
+   * emoji are positioned in viewport coordinates, so they cannot live inside the
+   * table screen — which means the screen's own teardown never removes them.
+   */
+  addFloater(node) {
+    this.floaters.add(node);
+    document.body.append(node);
+    return node;
+  }
+
+  removeFloater(node) {
+    this.floaters.delete(node);
+    node.remove();
+  }
+
+  /** Take every floating chip / sparkle / emoji off the screen. */
+  clearFloaters() {
+    for (const node of this.floaters) node.remove();
+    this.floaters.clear();
+  }
+
   flyChips(fromEl, count = 1) {
     const to = this.els.potDisplay.getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
@@ -873,12 +924,12 @@ export class GameView {
       chip.style.left = `${from.left + from.width / 2}px`;
       chip.style.top = `${from.top + from.height / 2}px`;
       chip.style.transitionDelay = `${i * 55}ms`;
-      document.body.append(chip);
+      this.addFloater(chip);
       this.frame(() => {
         chip.style.transform = `translate(${to.left + to.width / 2 - from.left - from.width / 2}px, ${to.top + to.height / 2 - from.top - from.height / 2}px) scale(0.7)`;
         chip.style.opacity = '0.9';
       });
-      this.later(() => chip.remove(), 800 + i * 60);
+      this.later(() => this.removeFloater(chip), 800 + i * 60);
     }
   }
 
@@ -890,8 +941,8 @@ export class GameView {
       node.style.top = `${rect.top + rect.height / 2 + (Math.random() * 40 - 20)}px`;
       node.style.setProperty('--sx', `${Math.random() * 80 - 40}px`);
       node.style.animationDelay = `${i * 45}ms`;
-      document.body.append(node);
-      this.later(() => node.remove(), 1600 + i * 50);
+      this.addFloater(node);
+      this.later(() => this.removeFloater(node), 1600 + i * 50);
     }
   }
 
@@ -935,8 +986,8 @@ export class GameView {
     const seat = [...this.seats.values()].find((node) => node.refs.name?.textContent === from);
     const rect = seat?.el.getBoundingClientRect() || this.els.tableArea?.getBoundingClientRect() || { left: 200, top: 200, width: 0, height: 0 };
     const node = el('div', { class: 'reaction-float', text, style: { left: `${rect.left + rect.width / 2}px`, top: `${rect.top}px` } });
-    document.body.append(node);
-    this.later(() => node.remove(), 1600);
+    this.addFloater(node);
+    this.later(() => this.removeFloater(node), 1600);
   }
 
   // ─────────────────────────────────────────────────────────────── plumbing ──
@@ -962,6 +1013,11 @@ export class GameView {
     this.stopCountdown();
     for (const id of this.viewTimers) clearTimeout(id);
     this.viewTimers.clear();
+    // Instantly: chips and sparkles are on <body>, not in the table screen, so
+    // cancelling their removal timers would otherwise leave them frozen over the
+    // lobby forever.
+    this.clearFloaters();
+    this.seatAnim.clear();
     // Cancel any queued cue (coin showers, chip tails) so nothing fires later.
     this.sound.stopPending?.();
     this.seats.clear();

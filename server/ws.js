@@ -51,6 +51,7 @@ export class WebSocketConnection {
     this.isAlive = true;
     this.data = {};             // scratch space for the application
     this.handlers = { message: [], close: [], pong: [] };
+    this.closeHook = null;      // set by attachWebSocketServer to release() the connection
     socket.setNoDelay(true);
   }
 
@@ -69,8 +70,17 @@ export class WebSocketConnection {
     }
   }
 
+  /**
+   * True while the socket can still carry bytes. A peer that disappeared leaves
+   * the socket half-open (we get 'end' but never 'close'), so writes to it
+   * succeed silently and go nowhere — callers must not trust them.
+   */
+  get writable() {
+    return !this.closed && !this.socket.destroyed && !this.socket.writableEnded;
+  }
+
   send(payload) {
-    if (this.closed) return false;
+    if (!this.writable) return false;
     const text = typeof payload === 'string' ? payload : JSON.stringify(payload);
     try {
       this.socket.write(encodeFrame(text, OPCODE.TEXT));
@@ -82,11 +92,13 @@ export class WebSocketConnection {
   }
 
   ping() {
-    if (this.closed) return;
+    if (!this.writable) return false;
     try {
       this.socket.write(encodeFrame(Buffer.alloc(0), OPCODE.PING));
+      return true;
     } catch {
       this.close();
+      return false;
     }
   }
 
@@ -166,9 +178,18 @@ export class WebSocketConnection {
         this.emit('pong');
         return;
       case OPCODE.CLOSE:
-        this.emit('close', 1000);
+        // Acknowledge the close and hand the teardown to the transport, which
+        // releases the connection exactly once (see release() below). Emitting
+        // the event directly here would double-report a closing connection.
+        try {
+          this.socket.write(encodeFrame(payload.subarray(0, 2), OPCODE.CLOSE));
+        } catch { /* peer already gone */ }
         this.closed = true;
-        this.socket.end();
+        try {
+          this.socket.end();
+        } catch { /* ignore */ }
+        if (this.closeHook) this.closeHook(1000);
+        else this.emit('close', 1000);
         return;
       case OPCODE.TEXT:
       case OPCODE.BINARY:
@@ -206,6 +227,29 @@ export class WebSocketConnection {
 export function attachWebSocketServer(httpServer, { path = '/ws', onConnection } = {}) {
   const connections = new Set();
 
+  /**
+   * Release a connection exactly once: drop it from the registry, mark it
+   * closed, destroy the socket and tell the application.
+   *
+   * Destroying the socket here matters. When a browser tab is closed or the
+   * page is reloaded the peer sends a FIN and nothing else; Node reports that as
+   * 'end' and leaves the socket half-open, so 'close' never arrives on its own
+   * and the socket, its buffers and the player's seat would be held until the
+   * keep-alive sweep noticed — or forever. Treating every terminal event as the
+   * end of the connection is what frees a seat the moment a player goes away.
+   */
+  function release(connection, code = 1006) {
+    if (!connections.has(connection)) return;
+    connections.delete(connection);
+    connection.closed = true;
+    try {
+      connection.socket.destroy();
+    } catch {
+      /* already gone */
+    }
+    connection.emit('close', code);
+  }
+
   const handleUpgrade = (request, socket, head) => {
     const url = new URL(request.url, 'http://localhost');
     if (url.pathname !== path) {
@@ -234,38 +278,43 @@ export function attachWebSocketServer(httpServer, { path = '/ws', onConnection }
     connections.add(connection);
     if (head && head.length) connection.push(head);
     socket.on('data', (chunk) => connection.push(chunk));
-    socket.on('error', () => cleanup());
-    socket.on('close', () => cleanup());
 
-    function cleanup() {
-      if (!connections.has(connection)) return;
-      connections.delete(connection);
-      connection.closed = true;
-      connection.emit('close', 1006);
-    }
+    connection.closeHook = (code) => release(connection, code);
+
+    // 'end' is the one that matters: it fires the moment the peer goes away,
+    // where 'close' waits for a teardown that a vanished peer never performs.
+    socket.on('end', () => release(connection, 1006));
+    socket.on('error', () => release(connection, 1006));
+    socket.on('close', () => release(connection, 1006));
 
     if (onConnection) onConnection(connection, request);
   };
 
   httpServer.on('upgrade', handleUpgrade);
 
-  // Keep-alive sweep: ping every 20s, drop connections that stop answering.
+  /**
+   * Keep-alive sweep. Healthy clients answer the protocol-level ping within a
+   * heartbeat; a phone that went to sleep or a cable that was pulled answers
+   * nothing. One missed heartbeat is enough to declare the peer gone, because
+   * the cheap cases (tab closed, page reloaded) are already handled instantly by
+   * the socket's 'end' event.
+   */
+  const HEARTBEAT_EVERY = 15000;
   const keepAlive = setInterval(() => {
-    for (const connection of connections) {
+    for (const connection of [...connections]) {
       if (connection.closed) {
-        connections.delete(connection);
+        release(connection, 1006);
         continue;
       }
       if (!connection.isAlive) {
         connection.close(1001, 'Idle');
-        connections.delete(connection);
-        connection.emit('close', 1001);
+        release(connection, 1001);
         continue;
       }
       connection.isAlive = false;
       connection.ping();
     }
-  }, 20000);
+  }, HEARTBEAT_EVERY);
   keepAlive.unref?.();
 
   return {

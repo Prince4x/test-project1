@@ -739,14 +739,19 @@ class App {
       clearInterval(this.tablesRefresh);
       this.online?.disconnect();
       this.online = null;
-      this.controller = null;
     }
+    // Stop the engine no matter which mode we were in: a practice table keeps
+    // its timer running otherwise, so leaving it left the bots playing hands
+    // nobody was watching, and starting a new table ran two engines at once.
+    this.controller?.stop?.();
+    this.controller = null;
     this.view.destroy();
     this.mode = null;
     $('#pill-connection').textContent = '● Offline';
     this.showScreen('lobby');
     this.renderStats();
   }
+
 
   teardown() {
     this.disposed = true;
