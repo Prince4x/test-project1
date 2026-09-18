@@ -1,12 +1,21 @@
 @echo off
 rem ===================================================================
 rem  Teen Patti Arena - Windows launcher
-rem  Double-click this file to start the multiplayer server and open
-rem  the game in your browser. Keep the server window open while you play.
+rem
+rem  Double-click this file to start the multiplayer server and open the
+rem  game in your browser. Keep this window open while you play.
+rem
+rem  This script deliberately does not use PowerShell: it is blocked on
+rem  some PCs by execution policy, it is slow to start, and its HTTP calls
+rem  go through the system proxy and prefer IPv6 "localhost", which can
+rem  make a working server look dead. It polls with Node instead.
 rem ===================================================================
 setlocal
 cd /d "%~dp0"
 title Teen Patti Arena
+
+set PORT=4000
+set LOG=server-log.txt
 
 where node >nul 2>nul
 if errorlevel 1 goto :offline
@@ -17,57 +26,58 @@ echo   ----------------
 echo   Starting the game server...
 echo.
 
-rem start it in its own minimised window so this one stays readable
-start "Teen Patti Arena server" /min cmd /c "node server\index.js"
-
-rem let friends on the same Wi-Fi reach port 4000 (silently skipped unless
-rem this window is an administrator - the README explains the manual way)
+rem Lift the firewall for friends on the same Wi-Fi. Harmless when this
+rem window is not an administrator (the command is simply refused).
 netsh advfirewall firewall add rule name="Teen Patti Arena (port 4000)" dir=in action=allow protocol=TCP localport=4000 >nul 2>nul
 
-rem WAIT FOR THE SERVER TO ANSWER. A fixed sleep is not enough on a cold
-rem start - without this the browser can open before the port is listening
-rem and all you see is "can't reach this page".
-where powershell >nul 2>nul
-if errorlevel 1 goto :plainwait
+rem Fresh log each run: the launcher prints it if the server dies.
+rem The path is relative (we already cd'd here) so it needs no quotes of its
+rem own, keeping the whole command a single clean string for cmd /c.
+if exist "%LOG%" del "%LOG%" >nul 2>nul
 
-echo   Waiting for the server to answer...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; for($i=0;$i -lt 60;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:4000/api/health'; if($r.StatusCode -eq 200){ $ok=$true; break } } catch {}; Start-Sleep -Milliseconds 500 }; if($ok){ try { $n=Invoke-RestMethod -TimeoutSec 2 'http://localhost:4000/api/network'; if($n.primary){ Write-Host ('   Friends on the same Wi-Fi open: ' + $n.primary) } } catch {}; exit 0 } else { exit 1 }"
+start "Teen Patti Arena server" /min cmd /c "node server\index.js 1> %LOG% 2>&1"
+
+echo   Waiting for the server to answer (up to 25 seconds)...
+echo.
+
+rem Node polls 127.0.0.1 - the address the server is certain to answer on.
+node "%~dp0tools\wait-for-server.mjs" %PORT% 25
 if errorlevel 1 goto :failed
 
-start "" "http://localhost:4000"
-echo.
-echo   The server is up and the game is opening at http://localhost:4000
-echo.
-echo   To play with a friend on the same Wi-Fi: send them the link printed
-echo   above (it looks like http://192.168.1.5:4000). In the game you can
-echo   also press the chat button and choose "Invite" to copy it.
-echo   A friend on a DIFFERENT network needs a tunnel or a deploy - see
-echo   "Play with friends" in README.md.
-echo.
-echo   Leave this window and the minimised server window open while you play.
-echo   Press any key to close THIS window - the game keeps running.
-pause >nul
-exit /b 0
+start "" "http://127.0.0.1:%PORT%"
 
-:plainwait
-rem no PowerShell on this PC: fall back to a plain three second wait
-ping -n 4 127.0.0.1 >nul
-start "" "http://localhost:4000"
+echo   The game is opening at http://127.0.0.1:%PORT%
+echo   (http://localhost:%PORT% works too.)
+echo.
+echo   ---------------------------------------------------------------
+echo    To play with a friend on the same Wi-Fi: send them the
+echo    "Friends on the same Wi-Fi open" link printed above.
+echo    They open it, press "Sit down", and you are playing together.
+echo    A friend on a DIFFERENT network needs a tunnel or a deploy -
+echo    see "Play with friends" in README.md.
+echo   ---------------------------------------------------------------
+echo.
+echo   Leave this window and the minimised server window open while you
+echo   play. Press any key to close THIS window - the game keeps running.
+pause >nul
 exit /b 0
 
 :failed
 echo.
 echo   ==============================================================
-echo    The server did not start within 30 seconds.
+echo    The server did not start.
 echo   ==============================================================
 echo.
-echo   The usual reasons are: another program is already using port
-echo   4000, or Node.js refused to run.
+echo   The offline version is opening now - it needs no server at all
+echo   and practice against the computer works completely.
 echo.
-echo   * Check the minimised "Teen Patti Arena server" window - the
-echo     error message is in there.
-echo   * Meanwhile the offline version is opening, which needs no
-echo     server at all (practice against the computer).
+echo   If you want the live tables, the message above says why the
+echo   server stopped. The two usual reasons are:
+echo.
+echo     * Something else is already using port 4000 - often a copy of
+echo       Teen Patti Arena you started earlier. Check your taskbar for
+echo       another "Teen Patti Arena" window.
+echo     * Node.js could not start. Type:  node --version
 echo.
 start "" "%~dp0PLAY-ME-first.html"
 echo   Press any key to close this window.
@@ -78,6 +88,7 @@ exit /b 1
 echo.
 echo   Node.js was not found on this PC, so the offline single-file
 echo   version will open instead - practice vs AI works fully there.
+echo.
 echo   (Install Node.js from https://nodejs.org to unlock live tables.)
 echo.
 start "" "%~dp0PLAY-ME-first.html"

@@ -91,10 +91,30 @@ test('the single file boots, deals and plays a hand with scripts enabled', { ski
 
   await waitFor(() => window.app, 20000, 'the app shell to boot from the single file');
 
-  // Lobby is rendered and multiplayer is politely disabled.
-  assert.ok(window.document.querySelector('#rank-chart').children.length >= 6, 'hand rankings render');
-  assert.equal(window.document.querySelector('#btn-online').disabled, true, 'online mode is disabled offline');
-  assert.match(window.document.querySelector('#table-list').textContent, /single-file build/i);
+    // Lobby is rendered. Multiplayer cannot work from a lone .html file, so the
+    // button has to explain that rather than swallow the click.
+    assert.ok(window.document.querySelector('#rank-chart').children.length >= 6, 'hand rankings render');
+    const onlineButton = window.document.querySelector('#btn-online');
+    assert.equal(onlineButton.disabled, false, 'the button stays clickable so it can explain itself');
+    assert.match(onlineButton.querySelector('small').textContent, /server app/i, 'its label says what it needs');
+    onlineButton.click();
+    const dialog = window.document.querySelector('#modal-root').textContent.replace(/\s+/g, ' ');
+    assert.match(dialog, /START-WINDOWS\.bat/, 'the help names the launcher to double-click');
+    assert.match(dialog, /same Wi-Fi/i, 'and explains the network requirement');
+    assert.match(dialog, /nodejs\.org/i, 'and where to get Node.js if it is missing');
+    window.document.querySelector('#modal-root').replaceChildren();
+    assert.match(window.document.querySelector('#table-list').textContent, /single-file build/i);
+    assert.ok(window.document.querySelector('#table-list .link-btn'), 'the table list offers the same help');
+
+  // One betting round instead of the default four, with fast bots: the hand is
+  // over in a few seconds instead of most of a minute, so the assertions below
+  // are about the game rather than about how loaded the machine is. A default-length hand runs at human pace and takes tens of
+  // real seconds, so this test used to fail whenever the machine was busy with
+  // other suites — it was measuring the scheduler, not the game. These are the
+  // same controls a player picks in the practice panel.
+  window.document.querySelector('#practice-players').value = '4';
+  window.document.querySelector('#practice-rounds').value = '1';
+  window.app.store.settings.practicePace = 'fast';
 
   // Press "Practice vs AI" exactly like a player would.
   window.document.querySelector('#btn-practice').click();
@@ -105,7 +125,7 @@ test('the single file boots, deals and plays a hand with scripts enabled', { ski
   // Play until a hand finishes.
   const started = Date.now();
   let acted = 0;
-  while (Date.now() - started < 60000 && !(window.app.view.snapshot?.history?.length >= 1)) {
+  while (Date.now() - started < 90000 && !(window.app.view.snapshot?.history?.length >= 1)) {
     const snapshot = window.app.view.snapshot;
     if (snapshot?.phase === 'betting') {
       const you = snapshot.you;

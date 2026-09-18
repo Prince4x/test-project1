@@ -12,9 +12,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { freePort } from './free-port.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 4500 + Math.floor(Math.random() * 300); // random: avoids stray squatters
+const PORT = await freePort();   // a port nothing else is using (see free-port.mjs)
 
 let JSDOM = null;
 try {

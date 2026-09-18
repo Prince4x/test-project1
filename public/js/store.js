@@ -26,7 +26,13 @@ const DEFAULTS = {
     practicePlayers: 4,
     practiceBoot: 10,
     practiceRounds: 4,
-    practiceTimer: 25
+    practiceTimer: 25,
+    /**
+     * How quickly the practice bots act: 'normal' feels like people thinking,
+     * 'fast' is for demos and for the test suite (a hand at normal pace takes
+     * tens of seconds of real waiting, which makes tests flaky under load).
+     */
+    practicePace: 'normal'
   },
   stats: {
     hands: 0,

@@ -12,6 +12,10 @@ npm run build:standalone      # → dist/teen-patti-standalone.html (one file, n
 
 Prefer no terminal at all? **`PLAY-ME-first.html`** ships with the project — double-click it.
 
+> That single file is the **offline** game: no server, so nobody else can join it, and its "Live tables"
+> button explains exactly how to get multiplayer instead of doing nothing. Live tables are one
+> double-click away in the same folder (`START-WINDOWS.bat` / `START-MAC-LINUX.command`).
+
 That one HTML file contains the whole game — rules engine, AI, animations, sounds, styles — with practice mode fully working offline. Only live multiplayer needs the server (as it must). Rebuild it any time after editing the source:
 
 ```bash
@@ -90,6 +94,7 @@ Teen Patti needs one shared dealer, so one of you runs the server and everybody 
 ### Same Wi-Fi (easiest — phone + laptop at home)
 
 1. On your PC, start the game: `node server/index.js` (or double-click `START-WINDOWS.bat`).
+   The server listens on IPv4 **and** IPv6 (`*:4000`) so that `localhost`, `127.0.0.1` and `[::1]` all work — on Windows `localhost` resolves to IPv6 first, and some tools would otherwise fail against a server that is running fine.
 2. The startup banner prints the address to share, e.g.
    ```
    This PC        http://localhost:4000
@@ -99,7 +104,9 @@ Teen Patti needs one shared dealer, so one of you runs the server and everybody 
 4. Your friend opens it, presses **Sit down** on your table, and you both play. Chat, reactions and every bet are shared live.
 
 Notes:
-- **Windows Firewall** asks the first time Node listens on the network — click *Allow access* (Private networks). If it was already blocked, allow `node.exe` under *Windows Defender Firewall → Allow an app*.
+- **Windows Firewall** asks the first time Node listens on the network — click *Allow access* (Private networks). If it was already blocked, allow `node.exe` under *Windows Defender Firewall → Allow an app*. `START-WINDOWS.bat` also adds the rule for you when run as administrator.
+- **Nothing happens when you double-click the launcher?** Windows blocks downloaded `.bat` files. Right-click it → *Properties* → tick *Unblock* → *OK*, or click *More info → Run anyway* when SmartScreen appears.
+- **The launcher says it is waiting for the server and never finishes?** The launcher writes the server's own output to `server-log.txt` and prints it when the server does not answer, so the real reason is on screen. The usual one is that port 4000 is already taken — often by a copy of the game you started earlier. Close that window (or `set PORT=4100 && node server\index.js`).
 - Both devices must be on the same network (same router). Guest Wi-Fi networks often isolate devices from each other.
 - The invite link inside a table (`💬 → 🔗 Invite`) builds itself from whichever address is reachable, so it is safe to copy and send.
 

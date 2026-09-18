@@ -102,11 +102,18 @@ test('a returning player with a saved biggest pot boots the shell and fills the 
     assert.equal(typeof app.frame, 'function', 'App has the frame() helper its animations call');
     assert.equal(typeof app.inviteBase, 'function', 'share helpers exist on the shell');
 
-    // Let the jackpot counter finish: it must animate, not throw.
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    // Let the jackpot counter finish: it must animate, not throw. Poll for the
+    // value instead of sleeping a fixed 1.2s — the count-up runs for ~900ms, so
+    // a fixed wait turns a busy machine into a false failure.
     const jackpot = window.document.querySelector('#jackpot-value');
     assert.ok(jackpot, 'the jackpot element is in the lobby');
-    assert.equal(jackpot.textContent.trim(), formatChips(5000), 'the saved biggest pot animates up to its value');
+    const expectedPot = formatChips(5000);
+    let reachedValue = false;
+    for (let i = 0; i < 120 && !reachedValue; i += 1) {
+      reachedValue = jackpot.textContent.trim() === expectedPot;
+      if (!reachedValue) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(jackpot.textContent.trim(), expectedPot, 'the saved biggest pot animates up to its value');
 
     // The lobby must show what the server reported (this used to be skipped
     // because every render sat behind an unset `alive` flag).

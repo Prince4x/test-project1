@@ -1121,6 +1121,22 @@ body[data-theme='light'] .share-bar .share-url { background: #fff; }
 .invite-note, .invite-steps { padding: 12px; border-radius: 13px; border: 1px dashed var(--border); background: rgba(88,166,255,0.06); }
 .invite-steps { background: rgba(255,255,255,0.03); }
 .invite-steps .rule-list { margin-top: 6px; }
+.invite-steps .rule-list li { margin-bottom: 2px; }
+.invite-steps .rule-list li b { display: block; }
+
+/* Inline text button — used where a full .btn would break the sentence flow. */
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--text); }
 
 </style>
 
@@ -3136,7 +3152,13 @@ const DEFAULTS = {
     practicePlayers: 4,
     practiceBoot: 10,
     practiceRounds: 4,
-    practiceTimer: 25
+    practiceTimer: 25,
+    /**
+     * How quickly the practice bots act: 'normal' feels like people thinking,
+     * 'fast' is for demos and for the test suite (a hand at normal pace takes
+     * tens of seconds of real waiting, which makes tests flaky under load).
+     */
+    practicePace: 'normal'
   },
   stats: {
     hands: 0,
@@ -5794,10 +5816,14 @@ class App {
     this.wireHoverSounds();
     this.animateJackpot();
     if (STANDALONE) {
+      // This file is the offline build: one .html, no server, so it cannot host
+      // a table for anybody. Say that clearly and hand over the exact steps
+      // rather than leaving a button that does nothing when it is clicked.
       const online = $('#btn-online');
-      online.querySelector('small').textContent = 'needs the full project (npm start)';
-      online.disabled = true;
-      online.title = 'Multiplayer needs the Node server from the full project';
+      online.querySelector('small').textContent = 'needs the server app — see how';
+      online.title = 'Tap to see how to play with friends on other devices';
+      online.classList.remove('dead');
+      online.onclick = () => this.showMultiplayerSetup();
       this.renderTicker([]);
     }
   }
@@ -5958,6 +5984,7 @@ class App {
     this.controller = new PracticeController({
       profile: this.store.profile,
       settings,
+      pace: this.store.settings.practicePace === 'fast' ? 'fast' : 'normal',
       onState: (snapshot) => {
         this.view.render(snapshot, { id: snapshot.tableId, name: snapshot.name, bots: snapshot.seats.filter((seat) => seat?.isBot).length });
       },
@@ -6108,6 +6135,49 @@ class App {
     else toast('Practice mode tops you up automatically between hands', { timeout: 2200 });
   }
 
+  /**
+   * Shown when somebody taps "Live tables" in the single-file build. Multiplayer
+   * genuinely cannot work from a lone .html file — a server has to be listening
+   * for the other device to connect to — so this explains the one thing to
+   * double-click instead of leaving them stuck.
+   */
+  showMultiplayerSetup() {
+    // Same shape as the in-game invite dialog: a numbered rule list, so the two
+    // dialogs read as one feature.
+    const step = (title, detail) => el('li', {}, [
+      el('b', { text: title }),
+      el('div', { class: 'tiny muted', text: detail })
+    ]);
+
+    openModal({
+      title: 'Play with friends on other devices',
+      icon: '🌐',
+      body: [
+        el('p', { class: 'muted', text: 'This single file is the offline game — it has no server, so nobody else can join it. Live tables are one double-click away in the same folder:' }),
+        el('div', { class: 'invite-steps' }, [
+          el('b', { text: 'Four steps' }),
+          el('ol', { class: 'rule-list tiny' }, [
+            step('Close this page and find the folder this file came from', 'It also contains START-WINDOWS.bat, README.md and the server folder.'),
+            step('Double-click START-WINDOWS.bat', 'Windows may ask whether to allow Node.js — choose Allow. On a Mac or Linux, use START-MAC-LINUX.command instead.'),
+            step('The window prints a link like http://192.168.1.5:4000', 'That is the address your friend needs. The game opens on this PC by itself.'),
+            step('Send them that link, and you both press “Sit down”', 'You need to be on the same Wi-Fi. The lobby has a copy button for the link as well.')
+          ])
+        ]),
+        el('div', { class: 'invite-note' }, [
+          el('b', { text: 'Not on the same Wi-Fi? ' }),
+          el('span', { text: 'A link like http://192.168.1.5:4000 only works inside your home network. For a friend elsewhere, open README.md → "Play with friends" and use a tunnel (cloudflared) or the included Docker/Render deploy.' })
+        ]),
+        el('div', { class: 'invite-note' }, [
+          el('b', { text: 'No Node.js? ' }),
+          el('span', { text: 'Live tables need it — install the free version from nodejs.org, then double-click the launcher again. Practice against the computer never needs it, and works offline right here.' })
+        ])
+      ],
+      actions: [
+        { label: 'Back to practising', kind: 'primary' }
+      ]
+    });
+  }
+
   showInvite() {
     const tableId = this.view.snapshot?.tableId;
     if (!tableId) return;
@@ -6179,9 +6249,14 @@ class App {
       const list = $('#table-list');
       if (list) {
         list.replaceChildren(el('p', { class: 'muted tiny' }, [
-          el('b', { text: 'This is the single-file build. ' }),
+          el('b', { text: 'This is the offline single-file build. ' }),
           el('span', {
-            text: 'Practice vs AI works completely offline. For live multiplayer tables, run the full project (npm start) — every other feature is identical.'
+            text: 'Practice vs AI works completely, with no server and no internet. For live multiplayer tables, double-click START-WINDOWS.bat (or START-MAC-LINUX.command) in this same folder — it starts the server and gives you a link to send a friend. '
+          }),
+          el('button', {
+            class: 'link-btn',
+            text: 'Show me how',
+            onclick: () => this.showMultiplayerSetup()
           })
         ]));
       }

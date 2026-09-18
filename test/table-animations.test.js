@@ -88,6 +88,13 @@ test('animations do not outlive the table, and a second game still animates', { 
     const app = window.app;
     const view = app.view;
 
+    // A short, fast table: this test is about animations and the seat ring, and
+    // it only needs cards on screen quickly. Default pacing takes tens of real
+    // seconds per hand, which made it flaky when the suite ran in parallel.
+    window.document.querySelector('#practice-players').value = '2';
+    window.document.querySelector('#practice-rounds').value = '3';
+    app.store.settings.practicePace = 'fast';
+
     app.startPractice();
     await sleep(400);
     assert.ok(document.querySelectorAll('#seats .seat').length > 0, 'the table draws its seats');
@@ -120,7 +127,7 @@ test('animations do not outlive the table, and a second game still animates', { 
     // ── 3. an already-visible hand is not re-flipped by a ring rebuild ──────
     let seatId = null;
     let sawVisibleHand = false;
-    for (let i = 0; i < 700; i += 1) {
+    for (let i = 0; i < 2500; i += 1) {
       const snapshot = view.snapshot;
       if (snapshot?.you) {
         seatId = snapshot.seats[snapshot.you.seat]?.id ?? seatId;

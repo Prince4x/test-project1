@@ -21,6 +21,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachWebSocketServer } from '../server/ws.js';
+import { freePort } from './free-port.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -146,7 +147,7 @@ test('a released connection refuses to pretend it can still send', async () => {
 });
 
 test('a closed tab is noticed at once instead of stalling the table', async () => {
-  const port = 4600 + Math.floor(Math.random() * 250);
+  const port = await freePort();
   const server = spawn(process.execPath, [path.join(root, 'server', 'index.js')], {
     cwd: root,
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
@@ -195,6 +196,51 @@ test('a closed tab is noticed at once instead of stalling the table', async () =
     two.socket.destroy();
     await sleep(500);
     assert.equal((await health()).clients, 0, 'and the table is released when they leave as well');
+  } finally {
+    server.kill('SIGKILL');
+  }
+});
+
+test('the server answers on both 127.0.0.1 and ::1, and says why when the port is taken', async () => {
+  const port = await freePort();
+  const start = () => spawn(process.execPath, [path.join(root, 'server', 'index.js')], {
+    cwd: root,
+    env: { ...process.env, PORT: String(port) },   // no HOST: the default bind
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  const server = start();
+  let output = '';
+  server.stdout.on('data', (chunk) => { output += chunk.toString(); });
+  server.stderr.on('data', (chunk) => { output += chunk.toString(); });
+
+  try {
+    let ready = false;
+    for (let i = 0; i < 60 && !ready; i += 1) {
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+        ready = response.ok;
+      } catch { await sleep(100); }
+    }
+    assert.ok(ready, 'the server came up on IPv4');
+
+    // The reason this matters: on Windows `localhost` resolves to ::1 first, and
+    // clients such as Windows PowerShell never fall back to IPv4. A server bound
+    // to 0.0.0.0 only looked dead to them.
+    const overIPv6 = await fetch(`http://[::1]:${port}/api/health`).then((r) => r.ok).catch(() => false);
+    assert.equal(overIPv6, true, 'and answers over IPv6 as well, so "localhost" works everywhere');
+    assert.match(output, /Teen Patti Arena is running/, 'the banner still prints');
+
+    // A second server on the same port must explain itself rather than dump a
+    // stack trace the user cannot act on.
+    const second = start();
+    let secondOutput = '';
+    second.stdout.on('data', (chunk) => { secondOutput += chunk.toString(); });
+    second.stderr.on('data', (chunk) => { secondOutput += chunk.toString(); });
+    const code = await new Promise((resolve) => second.on('exit', resolve));
+    assert.equal(code, 1, 'the second server exits with a failure code');
+    assert.match(secondOutput, /could not start: EADDRINUSE/, 'and names the real reason');
+    assert.match(secondOutput, /already running/, 'and tells the user what to do about it');
   } finally {
     server.kill('SIGKILL');
   }

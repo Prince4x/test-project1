@@ -1107,3 +1107,19 @@ body[data-theme='light'] .share-bar .share-url { background: #fff; }
 .invite-note, .invite-steps { padding: 12px; border-radius: 13px; border: 1px dashed var(--border); background: rgba(88,166,255,0.06); }
 .invite-steps { background: rgba(255,255,255,0.03); }
 .invite-steps .rule-list { margin-top: 6px; }
+.invite-steps .rule-list li { margin-bottom: 2px; }
+.invite-steps .rule-list li b { display: block; }
+
+/* Inline text button — used where a full .btn would break the sentence flow. */
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gold);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--text); }

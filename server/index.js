@@ -18,7 +18,17 @@ import { PERSONALITIES } from '../src/engine/ai.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT || 4000);
-const HOST = process.env.HOST || '0.0.0.0';
+/**
+ * Where to listen. Left unset on purpose: the default is a dual-stack bind so
+ * that both 127.0.0.1 and ::1 answer.
+ *
+ * This matters on Windows. There, `localhost` resolves to the IPv6 `::1` first,
+ * and plenty of clients (notably Windows PowerShell's Invoke-WebRequest) do not
+ * fall back to IPv4 when that refuses the connection. Binding `0.0.0.0` only
+ * made those clients fail against a server that was running perfectly.
+ * HOST=... still forces a specific address, which tests and containers use.
+ */
+const HOST = process.env.HOST || null;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -239,7 +249,7 @@ rooms.createRoom({ name: 'High Roller · 100 boot', config: { boot: 100, startCh
 const loop = setInterval(() => rooms.tick(), 400);
 loop.unref?.();
 
-server.listen(PORT, HOST, () => {
+function announce() {
   const net = networkInfo(PORT);
   console.log('');
   console.log('  🎴 Teen Patti Arena is running');
@@ -260,7 +270,44 @@ server.listen(PORT, HOST, () => {
   }
   console.log(`     tables         ${[...rooms.rooms.values()].map((room) => room.table.name).join(' | ')}`);
   console.log('');
-});
+}
+
+/** Port already taken, or another fatal listen failure: say so plainly. */
+function failToStart(error) {
+  console.error('');
+  console.error(`  ✖ The game server could not start: ${error.code || error.message}`);
+  if (error.code === 'EADDRINUSE') {
+    console.error(`    Port ${PORT} is already in use — most likely Teen Patti Arena is`);
+    console.error('    already running. Open http://localhost:' + PORT + ' — or close the');
+    console.error('    other window and start this one again.');
+  } else if (error.code === 'EACCES') {
+    console.error(`    Permission denied for port ${PORT}. Try a different one:`);
+    console.error(`      set PORT=4100 && node server\index.js`);
+  }
+  console.error('');
+  process.exit(1);
+}
+
+if (HOST) {
+  server.once('error', failToStart);
+  server.listen(PORT, HOST, announce);
+} else {
+  // Dual-stack first: one listener answering on both 127.0.0.1 and ::1.
+  const listenDual = () => {
+    server.once('error', (error) => {
+      if (['EAFNOSUPPORT', 'EADDRNOTAVAIL', 'EINVAL', 'EPROTONOSUPPORT'].includes(error.code)) {
+        // No usable IPv6 on this machine — IPv4 only is fine.
+        server.removeAllListeners('error');
+        server.once('error', failToStart);
+        server.listen(PORT, '0.0.0.0', announce);
+        return;
+      }
+      failToStart(error);
+    });
+    server.listen({ port: PORT, host: '::', ipv6Only: false }, announce);
+  };
+  listenDual();
+}
 
 const shutdown = () => {
   clearInterval(loop);

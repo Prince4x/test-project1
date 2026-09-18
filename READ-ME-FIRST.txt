@@ -20,6 +20,11 @@ B. With friends or family on other devices - needs Node.js
    4. Leave both windows open while you play. Closing the black window
       stops the game for everyone.
 
+   If the window says "Waiting for the server to answer" and never moves on,
+   it will now print the server's own error message for you and open the
+   offline game instead. The most common cause is that the game is already
+   running in another window - check your taskbar.
+
 
 WINDOWS BLOCKED THE FILE? - VERY COMMON
 ----------------------------------------
@@ -43,9 +48,21 @@ message when it cannot start. Copy that message to get help.
 
   "Can't reach this page" in the browser
       The server is not running. Double-click START-WINDOWS.bat and keep
-      the window it opens. If it closes straight away, look at the
-      minimised "Teen Patti Arena server" window - it prints the reason,
-      usually that port 4000 is already used by another program.
+      the window it opens. If it closes straight away, the launcher now
+      prints the reason for you and also saves it in server-log.txt next
+      to the game. The usual reason is that port 4000 is already used -
+      often by a copy of the game you started earlier.
+
+  "Waiting for the server to answer..." and it never finishes
+      Wait the full 25 seconds: after that the launcher tells you what the
+      server said and opens the offline game so you are not stuck. If the
+      server was fine, the game still opens by itself.
+
+  The multiplayer button is greyed out / does nothing
+      You are looking at PLAY-ME-first.html, which is the OFFLINE game -
+      one file, no server, so nobody can join it. That is intentional, and
+      clicking "Live tables" now shows exactly what to do. The short
+      answer: close it and double-click START-WINDOWS.bat instead.
 
   The page is blank / white
       Wait 3 seconds and reload (Ctrl+R). If a red bar appears, send us the
@@ -54,6 +71,8 @@ message when it cannot start. Copy that message to get help.
 
   My friend cannot connect
       1. Are you both on the SAME Wi-Fi? Mobile data will not work.
+         (And you must have started the game with START-WINDOWS.bat, not
+         PLAY-ME-first.html - the single file has no server to join.)
       2. The link must use the "Same Wi-Fi" address, e.g. http://192.168.1.5:4000
          A link saying localhost only works on the PC running the server.
       3. Windows Firewall: the first time Node.js listens, Windows asks.
