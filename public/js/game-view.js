@@ -33,6 +33,29 @@ const ACTION_TEXT = {
 
 const REACTIONS = ['👍', '😂', '😮', '🔥', '🎉', '😭', '🤝', '🃏'];
 
+/**
+ * Animation-speed setting: 1 is normal, larger is slower/longer. Shared with
+ * the app shell so the CSS, the audio and the JavaScript timings all agree.
+ */
+export const ANIM_SPEED = { slow: 1.6, normal: 1, fast: 0.55 };
+
+/**
+ * Showdown pacing. Hands turn over one at a time — weakest first — and the
+ * cards within a hand a beat apart, so the table can watch the winner appear.
+ * Both are stretched by the animation-speed setting like every other animation.
+ */
+const REVEAL_STEP = 320;     // ms between two players' hands
+const REVEAL_CARD_STEP = 90; // ms between the three cards of one hand
+
+/** Delay in ms before a card turns over. `index` is the card within the hand. */
+function revealDelay(revealIndex, index = 0, speed = 1) {
+  if (revealIndex == null) return index * REVEAL_CARD_STEP * speed;
+  return (revealIndex * REVEAL_STEP + index * REVEAL_CARD_STEP) * speed;
+}
+
+/** Hands worth shouting about: these get the full fanfare. */
+const MONSTER_HANDS = new Set(['Trail', 'Pure Sequence']);
+
 /** Chat messages that are nothing but emoji float over the sender's seat. */
 function isEmojiOnly(text) {
   if (typeof text !== 'string') return false;
@@ -146,6 +169,11 @@ export class GameView {
 
   // ───────────────────────────────────────────────────────── presentation ──
 
+  /** The animation-speed multiplier from the settings (1 = normal). */
+  animSpeed() {
+    return ANIM_SPEED[this.store?.settings?.animations] || 1;
+  }
+
   render(snapshot, tableInfo) {
     if (!snapshot) return;
     const previous = this.snapshot;
@@ -177,6 +205,21 @@ export class GameView {
       this.lastTickSecond = null;
       this.sound.turn();
     }
+    // A fresh showdown decides the order the hands turn over: weakest first,
+    // winner last. Doing it here — before the seats render — is what lets the
+    // cards animate in that order instead of all at once.
+    if (snapshot.results) {
+      if (this.revealedHandNo !== snapshot.results.handNo) {
+        this.revealedHandNo = snapshot.results.handNo;
+        this.revealOrder = new Map(
+          [...snapshot.results.rankings].reverse().map((entry, index) => [entry.id, index])
+        );
+      }
+    } else {
+      this.revealedHandNo = null;
+      this.revealOrder = null;
+    }
+
     this.renderSeats(snapshot);
     this.renderMyArea(snapshot);
     this.renderActionBar(snapshot);
@@ -275,14 +318,21 @@ export class GameView {
       // cards
       const faces = seat.cards || [];
       const previousCount = this.seatAnim.get(seat.id)?.faceCount ?? 0;
-      node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previousCount));
+      const revealIndex = this.revealOrder?.get(seat.id) ?? null;
+      node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previousCount, revealIndex));
       node.refs.hand.hidden = !seat.inHand || (seat.packed && !faces.length);
+      // The winning hand is lifted and ringed in gold at the showdown.
+      node.refs.hand.classList.toggle('winner-hand', Boolean(winners.has(seat.id) && faces.length === 3));
       // A folded hand greys out at the showdown. Derived from state rather than
       // from the transition, so it survives a rebuild and never sticks around
       // into the next hand.
       node.refs.hand.classList.toggle('dim', Boolean(seat.packed) && snapshot.phase === PHASE.SETTLED);
       if (faces.length === 3 && previousCount < 3) {
-        this.sound.flip();
+        // During a showdown the flips are spaced out, and each one is heard as
+        // it happens rather than all at once.
+        const delay = revealDelay(revealIndex, 0, this.animSpeed());
+        if (delay > 0) this.later(() => this.sound.flip(), delay + REVEAL_CARD_STEP);
+        else this.sound.flip();
       }
       this.seatAnim.set(seat.id, { faceCount: faces.length, packed: seat.packed });
 
@@ -321,14 +371,16 @@ export class GameView {
     }
   }
 
-  seatCards(seat, faces, previousCount) {
+  seatCards(seat, faces, previousCount, revealIndex = null) {
     if (!seat.inHand) return [];
     if (faces.length === 3) {
       return faces.map((card, index) => {
         const node = cardEl(card, { size: 'sm' });
         if (previousCount < 3) {
-          node.classList.add('flip');
-          node.style.animationDelay = `${index * 90}ms`;
+          // `reveal` (showdown) waits its turn before turning over; `flip` is
+          // the plain "I looked at my cards" animation.
+          node.classList.add(revealIndex == null ? 'flip' : 'reveal');
+          node.style.animationDelay = `${revealDelay(revealIndex, index, this.animSpeed())}ms`;
         }
         return node;
       });
@@ -431,7 +483,7 @@ export class GameView {
     if (strength > 0.6) return `Strong — chaal ${formatChips(cost)} or raise; side show is available when 3+ players remain.`;
     if (strength > 0.35) return `Playable — a call costs ${formatChips(cost)}.`;
     if (snapshot.you.seen && snapshot.you.chips > 0) return `Weak hand — pack (fold) unless you fancy a bluff.`;
-    return 'Cautious — chud pack if the betting gets heavy.';
+    return 'Cautious — pack if the betting gets heavy.';
   }
 
   renderActionBar(snapshot) {
@@ -594,11 +646,15 @@ export class GameView {
     }
 
     if (options.sideShow) {
+      // Asking costs your minimum chaal, and the button says so up front.
+      const price = snapshot.config.sideShowCost === 'chaal' ? you.costToCall : 0;
       nodes.push(el('button', {
         class: 'btn action',
-        title: 'Compare with the player on your right — the weaker hand packs',
+        title: price > 0
+          ? `Pay ${formatChips(price)} to compare with the player on your right — the weaker hand packs`
+          : 'Compare with the player on your right — the weaker hand packs',
         onclick: () => this.act(ACTION.SIDE_SHOW)
-      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: 'compare' })]));
+      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: price > 0 ? formatChips(price) : 'compare' })]));
     }
 
     bar.replaceChildren(...nodes);
@@ -829,18 +885,50 @@ export class GameView {
       this.sound.lose();
     }
     const winner = event.winners[0];
+    const compared = event.reason !== 'fold' && event.rankings?.length > 1;
+    // "TRAIL!", "PURE SEQUENCE!" — the hand that won, above the winner's name.
+    const handName = compared ? winner?.hand?.name : null;
     if (winner) {
       this.lastWinner = winner;
-      const banner = el('div', { class: 'winner-banner' }, [
+      const monster = Boolean(handName && MONSTER_HANDS.has(handName));
+      const banner = el('div', { class: `winner-banner${monster ? ' monster' : ''}` }, [
+        handName ? el('div', { class: 'hand', text: `${handName.toUpperCase()}!` }) : null,
         el('div', { class: 'big', text: `${winner.avatar || ''} ${winner.name} wins ${formatChips(winner.amount)}` }),
-        el('div', { class: 'sub', text: event.reason === 'fold' ? 'everyone else packed' : `pot ${formatChips(event.pot)}` })
+        el('div', {
+          class: 'sub',
+          text: event.reason === 'fold'
+            ? 'everyone else packed'
+            : `${winner.hand?.text || handName || 'best hand'} · pot ${formatChips(event.pot)}`
+        })
       ]);
       this.els.winnerHost.replaceChildren(banner);
+      if (monster) this.sparkle(24);
       this.later(() => {
         if (this.els.winnerHost?.contains(banner)) banner.remove();
-      }, 4200);
+      }, 4600);
     }
-    this.showShowdownCards();
+
+    // Let the hands finish turning over before the centre panel claims the pot,
+    // then send the chips from the middle of the table to the winner's seat.
+    const revealMs = this.revealTime();
+    this.later(() => this.showShowdownCards(), revealMs);
+    this.later(() => this.payWinner(event), revealMs + 120);
+  }
+
+  /** How long the staggered showdown reveal takes, in ms. */
+  revealTime() {
+    const hands = this.revealOrder?.size || 1;
+    return (hands * REVEAL_STEP + 3 * REVEAL_CARD_STEP + 220) * this.animSpeed();
+  }
+
+  /** Chips leave the pot and land on the winner's seat. */
+  payWinner(event) {
+    if (!event?.winners?.length) return;
+    const winner = event.winners[0];
+    const seatNode = this.seats.get(winner.id);
+    const pot = Number(event.pot) || 0;
+    const chips = Math.max(3, Math.min(9, 2 + Math.floor(pot / 120)));
+    this.flyChips(this.els.potDisplay, chips, seatNode?.refs?.avatar || seatNode?.el);
   }
 
   /** At showdown the centre of the felt shows the best hand face up. */
@@ -916,8 +1004,14 @@ export class GameView {
     this.floaters.clear();
   }
 
-  flyChips(fromEl, count = 1) {
-    const to = this.els.potDisplay.getBoundingClientRect();
+  /**
+   * Fly chips from one element to another.
+   * @param {HTMLElement} fromEl
+   * @param {number} count
+   * @param {HTMLElement} [toEl] - defaults to the pot in the middle of the felt.
+   */
+  flyChips(fromEl, count = 1, toEl = null) {
+    const to = (toEl || this.els.potDisplay).getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
     for (let i = 0; i < count; i += 1) {
       const chip = el('div', { class: `chip c${[5, 10, 50, 100, 500][Math.floor(Math.random() * 5)]} fly-chip` });

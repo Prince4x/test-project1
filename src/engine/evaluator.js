@@ -69,26 +69,60 @@ function descRanks(cards) {
 }
 
 /**
+ * Where the A-2-3 run sits in the sequence ladder — genuine house-rule
+ * territory, so it is configurable.
+ *
+ *   'second' → A-K-Q > A-2-3 > K-Q-J > … > 4-3-2   (the ranking in our rules)
+ *   'lowest' → A-K-Q > K-Q-J > … > 4-3-2 > A-2-3   (the other common house rule)
+ */
+export const ACE_LOW = { SECOND: 'second', LOWEST: 'lowest' };
+
+/**
+ * The ranking slice of a table's rules. Every evaluation takes one of these,
+ * so a mode (Classic, Muflis, Joker, …) changes the rules without a second copy
+ * of the evaluator.
+ */
+export const DEFAULT_RANKING = Object.freeze({ sequenceAceLow: ACE_LOW.SECOND });
+
+/**
+ * Normalise ranking options. Accepts a whole table config (extra keys are
+ * ignored) so callers can just hand over `table.config`.
+ */
+export function rankingOptions(options = {}) {
+  return {
+    sequenceAceLow: options.sequenceAceLow === ACE_LOW.LOWEST ? ACE_LOW.LOWEST : ACE_LOW.SECOND
+  };
+}
+
+/**
  * Sequence detection. Returns the rank value used for comparisons:
  *   - A-K-Q  -> 14 (highest run)
- *   - A-2-3  -> 3  (lowest run, the ace plays low)
+ *   - A-2-3  -> 13.5 when it ranks second, 3 when it ranks last
  *   - otherwise -> the highest card of the run
  * Returns 0 when the cards are not consecutive.
+ *
+ * 13.5 is deliberate: it slots A-2-3 between A-K-Q (14) and K-Q-J (13) without
+ * disturbing any other run's integer key.
  */
-export function sequenceHigh(ranks) {
+export function sequenceHigh(ranks, options = {}) {
   const [a, b, c] = ranks;
   if (a === 14 && b === 13 && c === 12) return 14;             // A K Q
-  if (a === 14 && b === 3 && c === 2) return 3;                // A 3 2 -> play the 3 high
+  if (a === 14 && b === 3 && c === 2) {
+    return options.sequenceAceLow === ACE_LOW.LOWEST ? 3 : 13.5; // A 3 2
+  }
   if (a === b + 1 && b === c + 1) return a;
   return 0;
 }
 
 /**
  * Evaluate three cards.
+ *
+ * @param {string[]} cards - exactly three card ids.
+ * @param {{sequenceAceLow?: string}} [options] - the table's ranking rules.
  * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
  *            key: number[], name: string, label: string, high: number}}
  */
-export function evaluate(cards) {
+export function evaluate(cards, options = {}) {
   if (!Array.isArray(cards) || cards.length !== 3) {
     throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
   }
@@ -102,7 +136,7 @@ export function evaluate(cards) {
 
   // Sort groups by count first, then by rank so pair kickers order correctly.
   const groups = [...counts.entries()].sort((x, y) => (y[1] - x[1]) || (y[0] - x[0]));
-  const run = sequenceHigh(ranks);
+  const run = sequenceHigh(ranks, options);
   const isTrail = groups[0][1] === 3;
 
   let category;
@@ -175,7 +209,9 @@ export function describe(evaluation) {
 }
 
 function runText(high) {
-  if (high === 3) return 'A-2-3';
+  // 3 = the ace-low run when it ranks last, 13.5 = the same run when it ranks
+  // second. Either way it is printed as A-2-3.
+  if (high === 3 || high === 13.5) return 'A-2-3';
   return `${rankText(high - 2)}-${rankText(high - 1)}-${rankText(high)}`;
 }
 
@@ -192,19 +228,23 @@ export function compareKeys(a, b) {
 
 /**
  * Compare two hands (arrays of 3 cards, or pre-computed evaluations).
+ *
+ * `options` is only used when a side is given as raw cards — two evaluations
+ * already carry the rules they were computed under.
+ *
  * @returns {number} 1 when a wins, -1 when b wins, 0 on an exact tie.
  */
-export function compareHands(a, b) {
-  const evalA = Array.isArray(a) ? evaluate(a) : a;
-  const evalB = Array.isArray(b) ? evaluate(b) : b;
+export function compareHands(a, b, options) {
+  const evalA = Array.isArray(a) ? evaluate(a, options) : a;
+  const evalB = Array.isArray(b) ? evaluate(b, options) : b;
   return compareKeys(evalA.key, evalB.key);
 }
 
 /** The strongest hand in a list of {hand, ...} entries. */
-export function bestOf(entries) {
+export function bestOf(entries, options) {
   let best = null;
   for (const entry of entries) {
-    const evaluation = Array.isArray(entry.cards) ? evaluate(entry.cards) : entry.evaluation;
+    const evaluation = Array.isArray(entry.cards) ? evaluate(entry.cards, options) : entry.evaluation;
     if (!best || compareKeys(evaluation.key, best.evaluation.key) > 0) {
       best = { ...entry, evaluation };
     }

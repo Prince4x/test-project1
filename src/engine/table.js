@@ -19,13 +19,18 @@
  *     somebody Shows, or when only one player still has chips to bet.
  *   • Showdown compares hands, folds are paid into the pot and all-in players
  *     are protected by side pots.
+ *   • House-rule switches (see DEFAULT_CONFIG) cover how A-2-3 is ranked, a cap
+ *     on how much a single bet may be, how many rounds a player may stay blind,
+ *     a pot limit that forces a show, and what happens when hands tie.
+ *   • Deals are shuffled with `crypto.getRandomValues` unless a seed is given,
+ *     so a live table cannot be predicted from a previous hand.
  *
  * The engine never uses timers itself: the host (server or browser) owns the
  * clock and calls `checkTimeout(now)`. Every mutation appends to `events`,
  * which hosts drain and broadcast — they drive the animations and sounds.
  */
 
-import { makeDeck, shuffle, createRng } from './cards.js';
+import { makeDeck, shuffle, createRng, createSecureRng } from './cards.js';
 import {
   evaluate,
   compareKeys,
@@ -70,6 +75,45 @@ export const DEFAULT_CONFIG = {
   sideShowSeconds: 12,
   /** Allow side shows. */
   sideshow: true,
+  /**
+   * What asking for a side show costs: 'chaal' (your minimum chaal bet — the
+   * usual rule, and it counts as your bet for the round) or 'free'.
+   */
+  sideShowCost: 'chaal',
+  /**
+   * Must the player you ask already have looked at their cards?
+   * false (default) = a blind player who is asked is made to look before the
+   * comparison; true = you may only ask a player who is already seen.
+   */
+  sideShowTargetMustBeSeen: false,
+  /** How A-2-3 is ranked: 'second' (above K-Q-J) or 'lowest' (below 4-3-2). */
+  sequenceAceLow: 'second',
+  /**
+   * Cap on a single bet, as a multiple of the stake: a raise may set the stake
+   * to at most `stake * maxBetMultiple`. At the default 2 that is "blind up to
+   * 2x, seen up to 4x" in the half-rate notation. 0 = no cap (chips only).
+   */
+  maxBetMultiple: 2,
+  /**
+   * Rounds a player may keep playing blind (0 = unlimited). Reaching the limit
+   * makes the player look at their cards at the start of their next turn — they
+   * may still pack afterwards.
+   */
+  maxBlindRounds: 0,
+  /**
+   * Pot size at which every live player is forced to show (0 = no limit).
+   * Without it a hand can only grow as fast as the players' stacks allow.
+   */
+  potLimit: 0,
+  /**
+   * What happens when two showdown hands are exactly equal.
+   * 'requester-loses' = the player who paid for the show loses the pot.
+   * 'split' = the tied players share it.
+   * `showTie` applies to a show somebody asked for, `forcedShowTie` to a show
+   * the table forced (round limit, pot limit, everyone all-in).
+   */
+  showTie: 'requester-loses',
+  forcedShowTie: 'split',
   /** Time source: () => ms. Hosts may inject their own (tests, replay). */
   clock: null,
   /** Minimum raise over the current stake. */
@@ -135,7 +179,21 @@ export class TeenPattiTable {
     this.turnDeadline = 0;
     this.sideShowDeadline = 0;
     this.sessionStats = new Map();
-    this.rng = this.config.rng || createRng(this.config.seed || this.now());
+    /**
+     * Deal source. A seeded (or injected) generator is only for tests, replays
+     * and scripted demos — a real table must not have a predictable deck, so it
+     * gets the cryptographic generator instead.
+     */
+    this.rng = this.config.rng
+      || (this.config.seed != null ? createRng(this.config.seed) : createSecureRng());
+  }
+
+  /**
+   * The ranking slice of this table's rules, handed to the evaluator so that
+   * every hand is judged under the same house rules.
+   */
+  rankingOptions() {
+    return { sequenceAceLow: this.config.sequenceAceLow };
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
@@ -311,6 +369,7 @@ export class TeenPattiTable {
     this.events = [];
     this.results = null;
     this.sideShow = null;
+    this.showRequesterId = null;
     this.handNo += 1;
     this.round = 1;
 
@@ -371,13 +430,23 @@ export class TeenPattiTable {
       players: entrants.map((player) => ({ id: player.id, seat: player.seat, committed: player.committed }))
     });
 
-    this.maybeShowdown();
+    // A table whose pot limit is lower than the boot money is already there
+    // the moment the cards are out — rare, but the rule has to mean something.
+    this.maybePotLimitShow() || this.maybeShowdown();
     return this.handNo;
   }
 
   startTurnClock() {
     this.turnStartedAt = this.now();
     const player = this.turnPlayer;
+    // House rule: you may not hide behind a blind bet forever. Once the limit
+    // is up, the cards are turned over for you at the start of your turn.
+    if (player && !player.seen && this.config.maxBlindRounds > 0 && this.round > this.config.maxBlindRounds) {
+      try {
+        this.see(player.id);
+        this.pushLog(`${player.name} ran out of blind rounds and had to look`);
+      } catch { /* already out of the hand — nothing to do */ }
+    }
     // A player who lost their connection gets a much shorter clock: their seat
     // still plays out the hand, but nobody waits around for them.
     const offline = player && player.connected === false;
@@ -399,7 +468,9 @@ export class TeenPattiTable {
     player.seen = true;
     player.lastAction = ACTION.SEE;
     this.pushEvent({ type: 'see', playerId: player.id, seat: player.seat });
-    this.pushLog(`${player.name} saw their cards (${player.cards.join(' ')})`);
+    // Never log the cards themselves: the log is part of every snapshot, so
+    // printing them here would hand every opponent the hand at the table.
+    this.pushLog(`${player.name} saw their cards`);
     return player;
   }
 
@@ -445,7 +516,7 @@ export class TeenPattiTable {
     }
 
     if (player.status === 'playing') player.status = 'playing';
-    if (this.phase === PHASE.BETTING && !this.sideShow) this.advanceTurn();
+    if (this.phase === PHASE.BETTING && !this.sideShow && !this.maybePotLimitShow()) this.advanceTurn();
     return true;
   }
 
@@ -528,9 +599,17 @@ export class TeenPattiTable {
     return min;
   }
 
+  /**
+   * Highest stake this player may raise to.
+   *
+   * Two ceilings apply: what they can afford (a blind player pays half, so
+   * their stack goes twice as far), and the house cap on how far the stake may
+   * jump in a single bet (`maxBetMultiple` — 2 means "the stake may double").
+   */
   maxRaiseFor(player) {
     const affordable = player.seen ? player.chips : player.chips * 2;
-    const cap = this.config.maxStake > 0 ? Math.min(affordable, this.config.maxStake) : affordable;
+    let cap = this.config.maxStake > 0 ? Math.min(affordable, this.config.maxStake) : affordable;
+    if (this.config.maxBetMultiple > 0) cap = Math.min(cap, this.stake * this.config.maxBetMultiple);
     return Math.max(0, cap);
   }
 
@@ -603,6 +682,8 @@ export class TeenPattiTable {
     const paid = this.pay(player, cost);
     player.lastAction = ACTION.SHOW;
     this.pending.delete(player.id);
+    // Remembered so an exact tie can be settled against whoever paid for it.
+    this.showRequesterId = player.id;
     this.pushEvent({
       type: 'action',
       action: ACTION.SHOW,
@@ -619,8 +700,10 @@ export class TeenPattiTable {
     if (!this.config.sideshow) return false;
     if (!player.seen || player.allIn) return false;
     if (this.activePlayers.length < 3) return false;
+    if (this.config.sideShowCost === 'chaal' && player.chips < this.callCost(player)) return false;
     const target = this.playerAt(this.previousActiveSeat(player.seat));
     if (!target || target.id === player.id) return false;
+    if (this.config.sideShowTargetMustBeSeen && !target.seen) return false;
     return target.inHand && !target.packed && !target.allIn;
   }
 
@@ -633,19 +716,35 @@ export class TeenPattiTable {
     if (!target) throw new Error('No player to compare with');
     if (target.id === player.id) throw new Error('No player to compare with');
     if (target.allIn) throw new Error(`${target.name} is all-in — no side show possible`);
+    if (this.config.sideShowTargetMustBeSeen && !target.seen) {
+      throw new Error(`${target.name} has not seen their cards yet`);
+    }
+
+    // Comparing costs your minimum chaal — and that bet is your action for the
+    // round, so you are not charged twice for the same turn.
+    const cost = this.callCost(player);
+    if (this.config.sideShowCost === 'chaal' && player.chips < cost) {
+      throw new Error(`Not enough chips for a side show (need ${cost}) — go all-in`);
+    }
+    if (this.config.sideShowCost === 'chaal') this.pay(player, cost);
+    this.pending.delete(player.id);
     player.lastAction = ACTION.SIDE_SHOW;
     this.sideShow = {
       requesterId: player.id,
       requesterSeat: player.seat,
       targetId: target.id,
       targetSeat: target.seat,
+      cost: this.config.sideShowCost === 'chaal' ? cost : 0,
       deadline: this.now() + this.config.sideShowSeconds * 1000
     };
     this.sideShowDeadline = this.sideShow.deadline;
     this.pushEvent({ type: 'sideshow:request', ...this.sideShow });
-    this.pushLog(`${player.name} asked ${target.name} for a side show`);
-    // The requester keeps their turn: after the comparison resolves they must
-    // still make a betting decision.
+    this.pushLog(this.sideShow.cost > 0
+      ? `${player.name} paid ${this.sideShow.cost} to ask ${target.name} for a side show`
+      : `${player.name} asked ${target.name} for a side show`);
+    // The comparison is private: only the two players involved ever see the
+    // cards (see respondSideShow), and the requester has already bet, so the
+    // turn moves on once it resolves.
     return this.sideShow;
   }
 
@@ -661,15 +760,18 @@ export class TeenPattiTable {
     if (!accept) {
       this.pushEvent({ type: 'sideshow:declined', ...request });
       this.pushLog(`${target.name} declined the side show`);
-      if (this.turnSeat === requester.seat) this.startTurnClock();
+      // The requester already bet when they asked, so their turn is over.
+      if (this.turnSeat === requester.seat) this.advanceTurn();
       return null;
     }
 
     // A blind player who is asked to compare must look at their cards first.
     if (!target.seen) this.see(target.id);
 
-    const requesterHand = evaluate(requester.cards);
-    const targetHand = evaluate(target.cards);
+    const ranking = this.rankingOptions();
+    const requesterHand = evaluate(requester.cards, ranking);
+    const targetHand = evaluate(target.cards, ranking);
+    // A tie goes against the requester: they asked for the comparison.
     const winner = compareKeys(requesterHand.key, targetHand.key) > 0 ? requester : target;
     const loser = winner === requester ? target : requester;
     loser.packed = true;
@@ -686,7 +788,7 @@ export class TeenPattiTable {
       targetCards: target.cards.slice()
     });
     this.pushLog(`${winner.name} won the side show — ${loser.name} packed`);
-    if (this.turnSeat === requester.seat && requester.packed) this.advanceTurn();
+    if (this.turnSeat === requester.seat) this.advanceTurn();
     else if (this.phase === PHASE.BETTING) this.maybeShowdown();
     return { winnerId: winner.id, loserId: loser.id };
   }
@@ -737,6 +839,21 @@ export class TeenPattiTable {
     if (this.actionablePlayers.length <= 1) return this.showdown('allin');
   }
 
+  /**
+   * Pot limit: once the pot reaches the configured size every live player
+   * shows, so a hand cannot be inflated forever.
+   * @returns {boolean} true when the hand was sent to a showdown.
+   */
+  maybePotLimitShow() {
+    if (this.phase !== PHASE.BETTING) return false;
+    if (this.config.potLimit <= 0) return false;
+    if (this.potTotal < this.config.potLimit) return false;
+    if (this.activePlayers.length < 2) return false;
+    this.pushLog(`Pot limit of ${this.config.potLimit} reached — everyone still in shows`);
+    this.showdown('potlimit');
+    return true;
+  }
+
   /** Timer hook — the host owns the clock. */
   checkTimeout(now = this.now()) {
     if (this.sideShow && now > this.sideShowDeadline) {
@@ -764,8 +881,17 @@ export class TeenPattiTable {
   // ────────────────────────────────────────────────────────────── showdown ──
 
   /**
+   * Which tie rule applies to a showdown. A show somebody asked and paid for is
+   * the only one that can punish the player who asked for it.
+   * @param {'fold'|'show'|'rounds'|'potlimit'|'allin'} reason
+   */
+  tieRuleFor(reason) {
+    return reason === 'show' ? this.config.showTie : this.config.forcedShowTie;
+  }
+
+  /**
    * Resolve the hand.
-   * @param {'fold'|'show'|'rounds'|'allin'} reason
+   * @param {'fold'|'show'|'rounds'|'potlimit'|'allin'} reason
    */
   showdown(reason) {
     if (this.phase !== PHASE.BETTING) return;
@@ -774,8 +900,9 @@ export class TeenPattiTable {
     this.turnDeadline = 0;
     const live = this.activePlayers;
 
+    const ranking = this.rankingOptions();
     const evaluations = new Map();
-    for (const player of live) evaluations.set(player.id, evaluate(player.cards));
+    for (const player of live) evaluations.set(player.id, evaluate(player.cards, ranking));
 
     const contributions = new Map();
     for (const player of this.players) if (player.committed > 0) contributions.set(player.id, player.committed);
@@ -808,7 +935,19 @@ export class TeenPattiTable {
         for (const player of eligible.slice(1)) {
           if (compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) > 0) best = player;
         }
-        const tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        let tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        /**
+         * Tie rule. Somebody paid for this showdown (a `show` request), so an
+         * exact tie goes against them; a showdown the table forced — round
+         * limit, pot limit, everyone all-in — is shared instead.
+         */
+        if (tied.length > 1 && this.tieRuleFor(reason) === 'requester-loses' && this.showRequesterId) {
+          const withoutRequester = tied.filter((player) => player.id !== this.showRequesterId);
+          if (withoutRequester.length) {
+            tied = withoutRequester;
+            this.pushLog(`Exact tie — ${this.getPlayer(this.showRequesterId)?.name} asked for the show and loses it`);
+          }
+        }
         const share = Math.floor(layerPot / tied.length);
         let remainder = layerPot - share * tied.length;
         for (const player of tied) {
@@ -850,6 +989,7 @@ export class TeenPattiTable {
     this.results = {
       handNo: this.handNo,
       reason,
+      tieRule: this.tieRuleFor(reason),
       pot: potTotal,
       stake: this.stake,
       winners: winners.sort((a, b) => b.amount - a.amount),
@@ -937,7 +1077,7 @@ export class TeenPattiTable {
   /** Ranked strength of the viewer's own hand (used for the "your hand" widget). */
   handInfo(cards) {
     if (!cards || cards.length !== 3) return null;
-    const evaluation = evaluate(cards);
+    const evaluation = evaluate(cards, this.rankingOptions());
     return {
       category: evaluation.category,
       name: evaluation.name,
@@ -1061,6 +1201,11 @@ export class TeenPattiTable {
         minRaise: this.config.minRaise,
         maxStake: this.config.maxStake,
         sideshow: this.config.sideshow,
+        sideShowCost: this.config.sideShowCost,
+        maxBetMultiple: this.config.maxBetMultiple,
+        maxBlindRounds: this.config.maxBlindRounds,
+        potLimit: this.config.potLimit,
+        sequenceAceLow: this.config.sequenceAceLow,
         startChips: this.config.startChips,
         minBuyIn: this.config.minBuyIn,
         maxBuyIn: this.config.maxBuyIn

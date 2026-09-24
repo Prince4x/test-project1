@@ -27,6 +27,8 @@
   --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.4);
   --radius: 16px;
   --radius-sm: 10px;
+  /* Animation speed: 1 = normal, larger = slower and longer (durations are
+     multiplied by it, matching the audio cues and the JS timings). */
   --anim-speed: 1;
   --felt-texture:
     radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.09), transparent 62%),
@@ -117,8 +119,8 @@ button { cursor: pointer; }
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   font-weight: 650;
-  transition: transform calc(0.14s / var(--anim-speed)), background calc(0.2s / var(--anim-speed)),
-    box-shadow calc(0.2s / var(--anim-speed)), border-color 0.2s;
+  transition: transform calc(0.14s * var(--anim-speed)), background calc(0.2s * var(--anim-speed)),
+    box-shadow calc(0.2s * var(--anim-speed)), border-color 0.2s;
   user-select: none;
 }
 .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); }
@@ -340,7 +342,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
 .pot-display .pot-value { font-size: 23px; font-weight: 800; color: var(--gold); letter-spacing: -0.01em; }
 .pot-display .pot-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.6); }
 .pot-display .stake { font-size: 12px; color: rgba(255, 255, 255, 0.78); }
-.pot-display.bump { animation: potBump calc(0.5s / var(--anim-speed)) ease; }
+.pot-display.bump { animation: potBump calc(0.5s * var(--anim-speed)) ease; }
 @keyframes potBump { 0% { transform: scale(1); } 40% { transform: scale(1.09); } 100% { transform: scale(1); } }
 
 .chip-stack { display: flex; gap: -6px; }
@@ -363,7 +365,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   z-index: 5;
-  transition: filter calc(0.25s / var(--anim-speed)), opacity calc(0.25s / var(--anim-speed));
+  transition: filter calc(0.25s * var(--anim-speed)), opacity calc(0.25s * var(--anim-speed));
 }
 .seat .seat-card {
   position: relative;
@@ -421,7 +423,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   background: linear-gradient(180deg, #ffd977, var(--gold-deep));
   color: #23180a; font-size: 11.5px; font-weight: 800;
   box-shadow: 0 6px 16px rgba(245, 196, 81, 0.35);
-  animation: bubbleIn calc(0.35s / var(--anim-speed)) cubic-bezier(0.2, 1.5, 0.4, 1);
+  animation: bubbleIn calc(0.35s * var(--anim-speed)) cubic-bezier(0.2, 1.5, 0.4, 1);
 }
 @keyframes bubbleIn { from { transform: scale(0.4) translateY(6px); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
@@ -431,7 +433,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   background: rgba(255, 255, 255, 0.95); color: #14202b;
   font-size: 12.5px; font-weight: 600;
   box-shadow: var(--shadow-md);
-  animation: bubbleIn calc(0.3s / var(--anim-speed)) ease;
+  animation: bubbleIn calc(0.3s * var(--anim-speed)) ease;
 }
 
 /* cards */
@@ -463,12 +465,30 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
 }
 .pcard .corner { position: absolute; top: 3px; left: 5px; font-size: 0.52em; line-height: 1; }
 .pcard .corner.br { top: auto; left: auto; bottom: 3px; right: 5px; transform: rotate(180deg); }
-.pcard.dealt { animation: dealIn calc(0.42s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.35, 1) backwards; }
+.pcard.dealt { animation: dealIn calc(0.42s * var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.35, 1) backwards; }
 @keyframes dealIn {
   from { transform: translate(var(--dx, 0), var(--dy, -140px)) rotate(-14deg) scale(0.7); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
-.pcard.flip { animation: flipIn calc(0.5s / var(--anim-speed)) ease; }
+.pcard.flip { animation: flipIn calc(0.5s * var(--anim-speed)) ease; }
+/*
+ * Showdown reveal: the same turn, but the card waits its turn first. `backwards`
+ * fill is what keeps it face-down during the delay — without it every card
+ * shows its face immediately and the stagger is invisible.
+ */
+.pcard.reveal { animation: revealCard calc(0.55s * var(--anim-speed)) cubic-bezier(0.2, 1.15, 0.35, 1) backwards; }
+@keyframes revealCard {
+  0% { transform: perspective(620px) rotateY(88deg) scale(0.94); opacity: 0; filter: brightness(0.5); }
+  60% { opacity: 1; }
+  100% { transform: perspective(620px) rotateY(0deg) scale(1); opacity: 1; filter: none; }
+}
+/* The hand that won the pot: lifted, ringed in gold, everything else recedes. */
+.seat-hand.winner-hand .pcard {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold), 0 0 26px rgba(245, 196, 81, 0.55);
+  transform: translateY(-5px);
+  transition: transform calc(0.25s * var(--anim-speed)), box-shadow calc(0.25s * var(--anim-speed));
+}
 /*
  * The perspective belongs inside the transform. Without it the browser has no
  * vanishing point, so rotateY(90deg) squashes the card to a flat line and it
@@ -566,7 +586,7 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   background: var(--panel-solid); border: 1px solid var(--border);
   border-radius: 18px; box-shadow: var(--shadow-lg);
   padding: 20px; display: flex; flex-direction: column; gap: 16px;
-  animation: modalIn calc(0.26s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1);
+  animation: modalIn calc(0.26s * var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1);
 }
 @keyframes modalIn { from { transform: translateY(14px) scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
 .modal header { display: flex; align-items: center; gap: 10px; }
@@ -607,7 +627,7 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: var(--shadow-lg);
   font-size: 13.5px; font-weight: 600;
-  animation: toastIn calc(0.3s / var(--anim-speed)) ease;
+  animation: toastIn calc(0.3s * var(--anim-speed)) ease;
 }
 .toast.warn { border-color: rgba(239, 75, 92, 0.6); }
 .toast.good { border-color: rgba(55, 211, 153, 0.6); }
@@ -617,11 +637,11 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 /* flying chips + winner fx */
 .fly-chip {
   position: fixed; z-index: 70; pointer-events: none;
-  transition: transform calc(0.62s / var(--anim-speed)) cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s;
+  transition: transform calc(0.62s * var(--anim-speed)) cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s;
 }
 .sparkle {
   position: fixed; z-index: 68; pointer-events: none; font-size: 20px;
-  animation: sparkleUp calc(1.05s / var(--anim-speed)) ease-out forwards;
+  animation: sparkleUp calc(1.05s * var(--anim-speed)) ease-out forwards;
 }
 @keyframes sparkleUp {
   from { transform: translate(0, 0) scale(0.5); opacity: 1; }
@@ -634,14 +654,27 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   border: 1px solid var(--gold);
   box-shadow: 0 0 60px rgba(245, 196, 81, 0.35);
   z-index: 8;
-  animation: modalIn calc(0.4s / var(--anim-speed)) cubic-bezier(0.2, 1.3, 0.4, 1);
+  animation: modalIn calc(0.4s * var(--anim-speed)) cubic-bezier(0.2, 1.3, 0.4, 1);
 }
 .winner-banner .big { font-size: 24px; font-weight: 800; color: var(--gold); }
 .winner-banner .sub { font-size: 13px; color: var(--text-dim); }
+/* "TRAIL!" — the category that just won the pot. */
+.winner-banner .hand {
+  font-size: 30px; font-weight: 900; letter-spacing: 0.06em; line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(245, 196, 81, 0.85), 0 2px 0 rgba(0, 0, 0, 0.55);
+  animation: handPop calc(0.55s * var(--anim-speed)) cubic-bezier(0.2, 1.6, 0.35, 1) backwards;
+}
+.winner-banner.monster { border-color: #fff; box-shadow: 0 0 90px rgba(245, 196, 81, 0.65); }
+@keyframes handPop {
+  0% { transform: scale(0.4) rotate(-6deg); opacity: 0; }
+  70% { transform: scale(1.12) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
 
 .reaction-float {
   position: fixed; z-index: 80; pointer-events: none; font-size: 40px;
-  animation: reactionFloat calc(1.5s / var(--anim-speed)) ease-out forwards;
+  animation: reactionFloat calc(1.5s * var(--anim-speed)) ease-out forwards;
 }
 @keyframes reactionFloat {
   0% { transform: translateY(0) scale(0.6); opacity: 0; }

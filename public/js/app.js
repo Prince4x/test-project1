@@ -7,7 +7,7 @@ import { Store, AVATARS } from '/js/store.js';
 import { SoundBoard } from '/js/sound.js';
 import { PracticeController } from '/js/practice.js';
 import { OnlineController } from '/js/net.js';
-import { GameView } from '/js/game-view.js';
+import { GameView, ANIM_SPEED } from '/js/game-view.js';
 import { RANKING_CHART, CATEGORY_LABEL } from '/engine/evaluator.js';
 import { PERSONALITIES } from '/engine/ai.js';
 import {
@@ -21,7 +21,12 @@ import {
  */
 const STANDALONE = Boolean(window.__TEEN_PATTI_STANDALONE__);
 
-const SPEED = { slow: 1.6, normal: 1, fast: 0.55 };
+/**
+ * 1 = normal, higher = slower. One table of values drives the CSS variable, the
+ * audio cues and the JavaScript animation timings, so "slow" means slow
+ * everywhere instead of only in the sound.
+ */
+const SPEED = ANIM_SPEED;
 
 class App {
   constructor() {

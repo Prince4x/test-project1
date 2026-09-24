@@ -335,3 +335,98 @@ test('the client modules and app shell load in a DOM', { skip: !JSDOM, timeout: 
     dom.window.close();
   }
 });
+
+test('the showdown turns hands over weakest first and names the winning hand', { skip: !JSDOM, timeout: 60000 }, async () => {
+  const dom = new JSDOM(fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8'), {
+    url: 'http://localhost:4000/',
+    pretendToBeVisual: true
+  });
+  const { window } = dom;
+  window.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 16);
+  window.cancelAnimationFrame = (id) => clearTimeout(id);
+
+  const previous = new Map();
+  const expose = (key, value) => {
+    previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  };
+  expose('window', window);
+  expose('document', window.document);
+  expose('navigator', window.navigator);
+  expose('localStorage', window.localStorage);
+  expose('requestAnimationFrame', window.requestAnimationFrame);
+  expose('cancelAnimationFrame', window.cancelAnimationFrame);
+  expose('HTMLElement', window.HTMLElement);
+  expose('Node', window.Node);
+  expose('SVGElement', window.SVGElement);
+
+  try {
+    const { GameView } = await import('../public/js/game-view.js');
+    const { TeenPattiTable, PHASE } = await import('../src/engine/table.js');
+
+    const store = {
+      settings: { hints: true, sound: false, ambience: false, volume: 0.8, animations: 'fast' },
+      profile: { id: 'you', name: 'You', avatar: '🧪' },
+      recordHand() {}
+    };
+    const sound = new Proxy({}, { get: () => () => {} });
+
+    const view = new GameView({ store, sound, callbacks: {} }).mount();
+
+    // A hand where the trail is the clear winner: you hold a pure sequence,
+    // bot1 a nothing hand, bot2 three sevens.
+    const table = new TeenPattiTable({ seed: 5, boot: 10, turnSeconds: 0 });
+    table.addPlayer({ id: 'you', name: 'You', chips: 1000 });
+    table.addPlayer({ id: 'bot1', name: 'Ravi', chips: 1000, isBot: true });
+    table.addPlayer({ id: 'bot2', name: 'Priya', chips: 1000, isBot: true });
+    table.startHand();
+    table.getPlayer('you').cards = ['AS', 'KS', 'QS'];
+    table.getPlayer('bot1').cards = ['2S', '5H', '9D'];
+    table.getPlayer('bot2').cards = ['7S', '7H', '7D'];
+    for (const player of table.players) table.see(player.id);
+    table.showdown('show');
+    assert.equal(table.phase, PHASE.SETTLED);
+
+    const snapshot = table.serialize('you');
+    view.render(snapshot, { id: table.id, name: table.name });
+    view.handleEvents(table.drainEvents(), snapshot);
+
+    // 1. The banner names the hand that won, and celebrates a monster.
+    const banner = window.document.querySelector('#winner-banner-host .winner-banner');
+    assert.ok(banner, 'a winner banner is shown');
+    assert.equal(banner.querySelector('.hand')?.textContent, 'TRAIL!');
+    assert.ok(banner.classList.contains('monster'), 'a trail gets the full fanfare');
+    assert.match(banner.textContent, /Priya/);
+
+    // 2. The winning hand is highlighted on the felt, and nothing else is.
+    assert.equal(view.seats.get('bot2').refs.hand.classList.contains('winner-hand'), true);
+    assert.equal(view.seats.get('you').refs.hand.classList.contains('winner-hand'), false);
+
+    // 3. Hands turn over weakest first, so the winner's cards land last.
+    const order = view.revealOrder;
+    assert.equal(order.get('bot1'), 0, 'the weakest hand is revealed first');
+    assert.equal(order.get('you'), 1);
+    assert.equal(order.get('bot2'), 2, 'the winner is revealed last');
+
+    const delays = [...view.seats.get('bot2').refs.hand.children]
+      .map((node) => Number.parseFloat(node.style.animationDelay));
+    assert.ok(delays.every((delay, index) => index === 0 || delay > delays[index - 1]),
+      `cards turn one after another (${delays.join(', ')})`);
+    assert.ok(delays[0] > 0, 'the winner waits its turn');
+    assert.ok([...view.seats.get('bot2').refs.hand.children].every((node) => node.classList.contains('reveal')),
+      'showdown cards use the reveal animation');
+
+    // 4. Once the reveal is over the centre of the felt shows the winning hand.
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    assert.match(window.document.querySelector('#deal-area').textContent, /Trail of 7s/);
+    assert.ok(view.floaters.size >= 0, 'the chip flight leaves no orphan nodes behind');
+
+    view.destroy();
+  } finally {
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+    dom.window.close();
+  }
+});

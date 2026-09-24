@@ -142,7 +142,9 @@ test('showdown reveals hands and awards the pot to the best hand', () => {
 });
 
 test('all-in players are protected by side pots', () => {
-  const fresh = new TeenPattiTable({ ...DEFAULT_CONFIG, seed: 7 });
+  // This one is about the layering maths, so the per-bet cap is switched off to
+  // let the two big stacks build a pot in a single raise.
+  const fresh = new TeenPattiTable({ ...DEFAULT_CONFIG, seed: 7, maxBetMultiple: 0 });
   fresh.addPlayer({ id: 'short', name: 'Short', chips: 10 });
   fresh.addPlayer({ id: 'big1', name: 'Big1', chips: 2000 });
   fresh.addPlayer({ id: 'big2', name: 'Big2', chips: 2000 });
@@ -262,7 +264,7 @@ test('a disconnected player is put on a short clock so the table keeps moving', 
   assert.equal(table.serialize(slow.id).turnSeconds, 30, 'the next player is back on the normal clock');
 });
 
-test('side show: the weaker hand packs, the requester keeps the turn', () => {
+test('side show: the weaker hand packs, and asking costs the minimum chaal', () => {
   const table = makeTable({ sideshow: true });
   table.startHand();
   const requester = table.turnPlayer;
@@ -271,19 +273,25 @@ test('side show: the weaker hand packs, the requester keeps the turn', () => {
   assert.ok(target, 'there is a neighbour to ask');
   target.cards = ['2S', '7H', '9D'];
   table.act(requester.id, ACTION.SEE);
-  table.act(requester.id, ACTION.SIDE_SHOW);
 
-  assert.ok(table.sideShow, 'a side show is pending');
-  assert.equal(table.turnSeat, requester.seat, 'the requester keeps the turn');
+  // Asking is a seen player's minimum chaal — one stake — and it is their bet
+  // for the round, so it must be affordable and must not be charged twice.
+  const chipsBefore = requester.chips;
+  const potBefore = table.potTotal;
+  table.act(requester.id, ACTION.SIDE_SHOW);
+  assert.equal(chipsBefore - requester.chips, table.config.boot, 'asking cost the minimum chaal');
+  assert.equal(table.potTotal - potBefore, table.config.boot);
+  assert.equal(table.sideShow.cost, table.config.boot);
   assert.throws(() => table.act(requester.id, ACTION.CHAAL), /side show/);
 
   table.respondSideShow(target.id, true);
   assert.equal(target.packed, true);
-  assert.equal(table.turnSeat, requester.seat);
   assert.equal(table.sideShow, null);
+  assert.notEqual(table.turnSeat, requester.seat, 'the requester already bet, so the turn moved on');
+  assert.ok(totalChips(table) === 3000, 'no chips went missing');
 });
 
-test('declining a side show resumes normal play', () => {
+test('declining a side show moves the turn on — the requester already bet', () => {
   const table = makeTable({ sideshow: true });
   table.startHand();
   const requester = table.turnPlayer;
@@ -292,9 +300,196 @@ test('declining a side show resumes normal play', () => {
   table.act(requester.id, ACTION.SIDE_SHOW);
   table.respondSideShow(target.id, false);
   assert.equal(target.packed, false);
-  table.act(requester.id, ACTION.CHAAL);
-  assert.notEqual(table.turnSeat, requester.seat);
+  assert.notEqual(table.turnSeat, requester.seat, 'the requester bet when they asked');
+  assert.equal(table.pending.has(requester.id), false, 'and has nothing left to answer this round');
+  assert.throws(() => table.act(requester.id, ACTION.CHAAL));
+  table.act(table.turnPlayer.id, ACTION.CHAAL);
 });
+
+test('a side show is free at tables configured that way', () => {
+  const table = makeTable({ sideshow: true, sideShowCost: 'free' });
+  table.startHand();
+  const requester = table.turnPlayer;
+  table.act(requester.id, ACTION.SEE);
+  const chipsBefore = requester.chips;
+  table.act(requester.id, ACTION.SIDE_SHOW);
+  assert.equal(requester.chips, chipsBefore, 'nothing was charged');
+  assert.equal(table.sideShow.cost, 0);
+});
+
+test('a side show can be limited to opponents who have already seen their cards', () => {
+  const table = makeTable({ sideshow: true, sideShowTargetMustBeSeen: true });
+  table.startHand();
+  const requester = table.turnPlayer;
+  const target = table.playerAt((requester.seat - 1 + 6) % 6);
+  table.act(requester.id, ACTION.SEE);
+
+  assert.equal(table.canSideShow(requester), false, 'the neighbour is still blind');
+  assert.throws(() => table.act(requester.id, ACTION.SIDE_SHOW), /has not seen/);
+
+  // Once the neighbour looks, the comparison is allowed.
+  table.see(target.id);
+  assert.equal(table.canSideShow(requester), true);
+});
+
+test('the pot limit forces everyone still in to show', () => {
+  // Three boots of 10 = 30 in the middle before anybody has bet; one seen
+  // chaal (10) takes it to the limit.
+  const table = makeTable({ potLimit: 40 });
+  table.startHand();
+  assert.equal(table.potTotal, 30);
+  assert.equal(table.phase, PHASE.BETTING, 'the boot alone is below the limit');
+  table.act(table.turnPlayer.id, ACTION.SEE);
+  table.act(table.turnPlayer.id, ACTION.CHAAL);
+  assert.equal(table.phase, PHASE.SETTLED, 'the pot limit ends the hand');
+  assert.equal(table.results.pot, 40, 'the pot that was forced to a show');
+  assert.equal(table.results.reason, 'potlimit');
+  assert.equal(table.results.rankings.length, 3, 'everybody still in is compared');
+});
+
+test('a bet may at most double the stake', () => {
+  const table = makeTable({ maxBetMultiple: 2 });
+  table.startHand();
+  const player = table.turnPlayer;
+  table.act(player.id, ACTION.SEE);
+  assert.equal(table.maxRaiseFor(player), table.stake * 2, 'seen: the stake may double');
+  assert.throws(() => table.act(player.id, ACTION.RAISE, { stake: table.stake * 3 }), /Maximum raise/);
+  table.act(player.id, ACTION.RAISE, { stake: table.stake * 2 });
+  assert.equal(table.stake, table.config.boot * 2);
+
+  // A blind raise has to double the stake already, so it has exactly one legal
+  // size under the cap — twice the stake, for half the price.
+  const blind = table.turnPlayer;
+  assert.equal(table.minRaiseFor(blind), table.stake * 2);
+  assert.equal(table.maxRaiseFor(blind), table.stake * 2);
+
+  // With the cap off, a raise is limited by the stack alone.
+  const uncapped = makeTable({ maxBetMultiple: 0 });
+  uncapped.startHand();
+  const first = uncapped.turnPlayer;
+  uncapped.act(first.id, ACTION.SEE);
+  assert.equal(uncapped.maxRaiseFor(first), first.chips);
+});
+
+test('players cannot hide behind a blind bet forever', () => {
+  const table = makeTable({ maxBlindRounds: 1 });
+  table.startHand();
+  // Everybody plays blind through the first round.
+  assert.equal(table.round, 1);
+  let guard = 0;
+  while (table.round === 1 && guard < 10) {
+    guard += 1;
+    table.act(table.turnPlayer.id, ACTION.BLIND);
+  }
+  assert.equal(table.round, 2, 'the first round completed');
+  assert.equal(table.turnPlayer.seen, true, 'a blind player on round 2 is made to look');
+
+  // Unlimited at a table that does not set the rule.
+  const unlimited = makeTable({ maxBlindRounds: 0 });
+  unlimited.startHand();
+  guard = 0;
+  while (unlimited.round === 1 && guard < 10) {
+    guard += 1;
+    unlimited.act(unlimited.turnPlayer.id, ACTION.BLIND);
+  }
+  assert.equal(unlimited.turnPlayer.seen, false, 'still blind — no limit configured');
+});
+
+test('ties: a requested show goes against the player who paid for it', () => {
+  const table = makeTable({ showTie: 'requester-loses' });
+  table.startHand();
+  // Leave two players holding exactly the same hand, in different suits.
+  table.act(table.turnPlayer.id, ACTION.PACK);
+  const [a, b] = table.activePlayers;
+  a.cards = ['AS', 'KD', '9C'];
+  b.cards = ['AH', 'KH', '9S'];
+  a.seen = true;
+  table.act(table.turnPlayer.id, ACTION.SEE);
+  const requester = table.turnPlayer;
+  table.act(requester.id, ACTION.SHOW);
+
+  assert.equal(table.results.reason, 'show');
+  assert.equal(table.results.tieRule, 'requester-loses');
+
+  // The pot is layered: the requester paid for the show, so the contested
+  // layer — the one both players covered — goes to the other hand, and the
+  // requester only gets back the chips nobody else matched.
+  const mine = table.results.winners.find((winner) => winner.id === requester.id);
+  const theirs = table.results.winners.find((winner) => winner.id !== requester.id);
+  const paidIn = (id) => table.results.rankings.find((entry) => entry.id === id).committed;
+  assert.ok(theirs.amount > mine.amount, 'the tie went to the other player');
+  assert.ok(mine.amount < paidIn(requester.id), 'the requester lost money on the tie');
+  assert.equal(
+    table.results.winners.reduce((sum, winner) => sum + winner.amount, 0),
+    table.results.pot
+  );
+});
+
+test('ties: splitting is one config switch away', () => {
+  const table = makeTable({ showTie: 'split' });
+  table.startHand();
+  table.act(table.turnPlayer.id, ACTION.PACK);
+  const [a, b] = table.activePlayers;
+  a.cards = ['AS', 'KD', '9C'];
+  b.cards = ['AH', 'KH', '9S'];
+  for (const player of table.activePlayers) player.seen = true;
+  const requester = table.turnPlayer;
+  table.act(requester.id, ACTION.SHOW);
+
+  const mine = table.results.winners.find((winner) => winner.id === requester.id);
+  const theirs = table.results.winners.find((winner) => winner.id !== requester.id);
+  const paidIn = (id) => table.results.rankings.find((entry) => entry.id === id).committed;
+  const priceOfAsking = paidIn(requester.id) - paidIn(theirs.id);
+
+  assert.ok(mine && theirs, 'both tied hands are paid');
+  // The layer both players covered is shared equally; the requester is only
+  // paid more because they also covered chips nobody else matched.
+  assert.equal(mine.amount - theirs.amount, priceOfAsking, 'the tie itself was split evenly');
+});
+
+test('ties: a forced show is shared', () => {
+  // 3 boots = 30; a limit of 40 is reached as soon as two players have called
+  // blind, which forces the show the table paid for, not one anyone asked for.
+  const table = makeTable({ forcedShowTie: 'split', potLimit: 40 });
+  const [a, b, c] = table.players;
+  table.startHand();
+  // The two players who will call hold exactly the same hand in different
+  // suits; the third is dealt out of it.
+  b.cards = ['AS', 'KS', '9C'];
+  c.cards = ['AH', 'KH', '9D'];
+  a.cards = ['2S', '3H', '5D'];
+  let guard = 0;
+  while (table.phase === PHASE.BETTING && guard < 10) {
+    guard += 1;
+    table.act(table.turnPlayer.id, ACTION.BLIND);
+  }
+
+  assert.equal(table.results.reason, 'potlimit');
+  assert.equal(table.results.tieRule, 'split');
+  const winners = table.results.winners;
+  assert.equal(winners.length, 2, 'the two tied hands share the pot');
+  assert.equal(winners[0].amount, winners[1].amount);
+  assert.equal(winners.reduce((sum, winner) => sum + winner.amount, 0), table.results.pot);
+  assert.ok(a.chips > 0 && b.chips > 0 && c.chips > 0);
+});
+
+test('the deck is unpredictable unless a seed is supplied', () => {
+  assert.deepEqual(firstDeal(makeTable()), firstDeal(makeTable()), 'the same seed deals the same cards');
+
+  const live = (id) => {
+    const table = new TeenPattiTable({ ...DEFAULT_CONFIG });
+    table.addPlayer({ id: `${id}a`, name: 'A', chips: 1000 });
+    table.addPlayer({ id: `${id}b`, name: 'B', chips: 1000 });
+    table.addPlayer({ id: `${id}c`, name: 'C', chips: 1000 });
+    return table;
+  };
+  assert.notDeepEqual(firstDeal(live('x')), firstDeal(live('y')), 'unseeded tables do not share a deal');
+});
+
+function firstDeal(table) {
+  table.startHand();
+  return table.players.map((player) => player.cards.join(' '));
+}
 
 test('a show can only be called heads-up and ends the hand immediately', () => {
   const table = makeTable({ sideshow: false });

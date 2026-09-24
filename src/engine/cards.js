@@ -56,6 +56,9 @@ export function makeDeck() {
 /**
  * xorshift128 PRNG — deterministic when seeded, which the test-suite relies on.
  * Returns a function producing floats in [0, 1).
+ *
+ * Use this only where reproducibility matters (tests, `/api/replay/:seed`,
+ * scripted demos). Live tables use `createSecureRng()` instead.
  */
 export function createRng(seed = Date.now()) {
   let a = (seed >>> 0) || 0x9e3779b9;
@@ -67,6 +70,36 @@ export function createRng(seed = Date.now()) {
     a = b; b = c; c = d;
     d = (d ^ (d >>> 19)) ^ (t ^ (t >>> 8));
     return (d >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Cryptographically secure RNG backed by `crypto.getRandomValues`.
+ *
+ * A shuffled deck must not be predictable: with a seeded generator (or
+ * `Math.random`, which is also not cryptographic) anyone who can guess the seed
+ * — or observe enough output — can reconstruct every future deal. This is what
+ * a live table uses by default; only tests and replays opt into a seed.
+ *
+ * Values are drawn in blocks of 64 for speed — a single `getRandomValues` call
+ * per card would be a measurable cost on every hand.
+ *
+ * @returns {() => number} floats in [0, 1)
+ */
+export function createSecureRng() {
+  const source = globalThis.crypto;
+  if (!source || typeof source.getRandomValues !== 'function') {
+    // Very old browsers without WebCrypto: fall back rather than fail to deal.
+    return createRng(Date.now());
+  }
+  const block = new Uint32Array(64);
+  let cursor = block.length;
+  return function next() {
+    if (cursor >= block.length) {
+      source.getRandomValues(block);
+      cursor = 0;
+    }
+    return block[cursor++] / 4294967296;
   };
 }
 

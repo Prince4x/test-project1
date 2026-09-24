@@ -46,16 +46,38 @@ test('trails compare by rank', () => {
   assert.equal(compareHands(['2S', '2H', '2D'], ['AS', 'AH', 'AD']), -1);
 });
 
-test('A-2-3 is the lowest pure sequence and A-K-Q the highest', () => {
-  assert.equal(sequenceHigh([14, 3, 2]), 3);
+test('A-K-Q is the highest run under either house rule', () => {
   assert.equal(sequenceHigh([14, 13, 12]), 14);
+  assert.equal(sequenceHigh([14, 13, 12], { sequenceAceLow: 'lowest' }), 14);
   assert.equal(sequenceHigh([7, 6, 5]), 7);
   assert.equal(sequenceHigh([14, 5, 4]), 0, 'A-5-4 is not a run');
+  assert.equal(compareHands(['AS', 'KS', 'QS'], ['4H', '3H', '2H']), 1, 'A-K-Q beats 4-3-2');
+});
 
-  const best = ['AS', 'KS', 'QS'];
-  assert.equal(compareHands(best, ['4H', '3H', '2H']), 1, 'A-K-Q beats 4-3-2');
-  assert.equal(compareHands(['4H', '3H', '2H'], ['AS', '3S', '2S']), 1, 'any run beats A-2-3');
-  assert.equal(compareHands(['AH', '3H', '2H'], ['4C', '3C', '2C']), -1, 'A-2-3 loses to 4-3-2');
+test('by default A-2-3 is the second highest run', () => {
+  // A-K-Q > A-2-3 > K-Q-J > … > 4-3-2. Compared like for like, because a pure
+  // sequence always beats a mixed one whatever the run.
+  assert.equal(sequenceHigh([14, 3, 2]), 13.5);
+  assert.equal(compareHands(['AH', '3D', '2C'], ['KS', 'QD', 'JC']), 1, 'A-2-3 beats K-Q-J (mixed)');
+  assert.equal(compareHands(['AH', '3H', '2H'], ['KS', 'QS', 'JS']), 1, 'A-2-3 beats K-Q-J (suited)');
+  assert.equal(compareHands(['AS', 'KD', 'QC'], ['AH', '3D', '2C']), 1, 'A-K-Q beats A-2-3');
+  assert.equal(compareHands(['AH', '3D', '2C'], ['4S', '3H', '2D']), 1, 'A-2-3 beats 4-3-2');
+  assert.equal(evaluate(['AH', '3H', '2H']).text, 'Pure Sequence A-2-3 of hearts');
+});
+
+test('A-2-3 can be ranked last instead — it is a house rule, not a law', () => {
+  const lowest = { sequenceAceLow: 'lowest' };
+  assert.equal(sequenceHigh([14, 3, 2], lowest), 3);
+  assert.equal(compareHands(['AH', '3D', '2C'], ['KS', 'QD', 'JC'], lowest), -1, 'A-2-3 loses to K-Q-J');
+  assert.equal(compareHands(['4S', '3H', '2D'], ['AH', '3D', '2C'], lowest), 1, '4-3-2 beats A-2-3');
+  assert.equal(compareHands(['AS', 'KS', 'QS'], ['AH', '3H', '2H'], lowest), 1, 'A-K-Q still wins');
+  // The printed name is the same either way — only the ordering changes.
+  assert.equal(evaluate(['AH', '3H', '2H'], lowest).text, 'Pure Sequence A-2-3 of hearts');
+});
+
+test('a run of one suit outranks the same run in mixed suits', () => {
+  assert.equal(compareHands(['AS', 'KS', 'QS'], ['AH', 'KD', 'QC']), 1);
+  assert.equal(compareHands(['AH', '3H', '2H'], ['AS', '3D', '2C']), 1);
 });
 
 test('pairs are decided by pair rank, then kicker', () => {

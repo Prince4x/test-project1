@@ -41,6 +41,8 @@
   --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.4);
   --radius: 16px;
   --radius-sm: 10px;
+  /* Animation speed: 1 = normal, larger = slower and longer (durations are
+     multiplied by it, matching the audio cues and the JS timings). */
   --anim-speed: 1;
   --felt-texture:
     radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.09), transparent 62%),
@@ -131,8 +133,8 @@ button { cursor: pointer; }
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   font-weight: 650;
-  transition: transform calc(0.14s / var(--anim-speed)), background calc(0.2s / var(--anim-speed)),
-    box-shadow calc(0.2s / var(--anim-speed)), border-color 0.2s;
+  transition: transform calc(0.14s * var(--anim-speed)), background calc(0.2s * var(--anim-speed)),
+    box-shadow calc(0.2s * var(--anim-speed)), border-color 0.2s;
   user-select: none;
 }
 .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); }
@@ -354,7 +356,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
 .pot-display .pot-value { font-size: 23px; font-weight: 800; color: var(--gold); letter-spacing: -0.01em; }
 .pot-display .pot-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.6); }
 .pot-display .stake { font-size: 12px; color: rgba(255, 255, 255, 0.78); }
-.pot-display.bump { animation: potBump calc(0.5s / var(--anim-speed)) ease; }
+.pot-display.bump { animation: potBump calc(0.5s * var(--anim-speed)) ease; }
 @keyframes potBump { 0% { transform: scale(1); } 40% { transform: scale(1.09); } 100% { transform: scale(1); } }
 
 .chip-stack { display: flex; gap: -6px; }
@@ -377,7 +379,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   z-index: 5;
-  transition: filter calc(0.25s / var(--anim-speed)), opacity calc(0.25s / var(--anim-speed));
+  transition: filter calc(0.25s * var(--anim-speed)), opacity calc(0.25s * var(--anim-speed));
 }
 .seat .seat-card {
   position: relative;
@@ -435,7 +437,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   background: linear-gradient(180deg, #ffd977, var(--gold-deep));
   color: #23180a; font-size: 11.5px; font-weight: 800;
   box-shadow: 0 6px 16px rgba(245, 196, 81, 0.35);
-  animation: bubbleIn calc(0.35s / var(--anim-speed)) cubic-bezier(0.2, 1.5, 0.4, 1);
+  animation: bubbleIn calc(0.35s * var(--anim-speed)) cubic-bezier(0.2, 1.5, 0.4, 1);
 }
 @keyframes bubbleIn { from { transform: scale(0.4) translateY(6px); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
@@ -445,7 +447,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   background: rgba(255, 255, 255, 0.95); color: #14202b;
   font-size: 12.5px; font-weight: 600;
   box-shadow: var(--shadow-md);
-  animation: bubbleIn calc(0.3s / var(--anim-speed)) ease;
+  animation: bubbleIn calc(0.3s * var(--anim-speed)) ease;
 }
 
 /* cards */
@@ -477,12 +479,30 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
 }
 .pcard .corner { position: absolute; top: 3px; left: 5px; font-size: 0.52em; line-height: 1; }
 .pcard .corner.br { top: auto; left: auto; bottom: 3px; right: 5px; transform: rotate(180deg); }
-.pcard.dealt { animation: dealIn calc(0.42s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.35, 1) backwards; }
+.pcard.dealt { animation: dealIn calc(0.42s * var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.35, 1) backwards; }
 @keyframes dealIn {
   from { transform: translate(var(--dx, 0), var(--dy, -140px)) rotate(-14deg) scale(0.7); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
-.pcard.flip { animation: flipIn calc(0.5s / var(--anim-speed)) ease; }
+.pcard.flip { animation: flipIn calc(0.5s * var(--anim-speed)) ease; }
+/*
+ * Showdown reveal: the same turn, but the card waits its turn first. `backwards`
+ * fill is what keeps it face-down during the delay — without it every card
+ * shows its face immediately and the stagger is invisible.
+ */
+.pcard.reveal { animation: revealCard calc(0.55s * var(--anim-speed)) cubic-bezier(0.2, 1.15, 0.35, 1) backwards; }
+@keyframes revealCard {
+  0% { transform: perspective(620px) rotateY(88deg) scale(0.94); opacity: 0; filter: brightness(0.5); }
+  60% { opacity: 1; }
+  100% { transform: perspective(620px) rotateY(0deg) scale(1); opacity: 1; filter: none; }
+}
+/* The hand that won the pot: lifted, ringed in gold, everything else recedes. */
+.seat-hand.winner-hand .pcard {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold), 0 0 26px rgba(245, 196, 81, 0.55);
+  transform: translateY(-5px);
+  transition: transform calc(0.25s * var(--anim-speed)), box-shadow calc(0.25s * var(--anim-speed));
+}
 /*
  * The perspective belongs inside the transform. Without it the browser has no
  * vanishing point, so rotateY(90deg) squashes the card to a flat line and it
@@ -580,7 +600,7 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   background: var(--panel-solid); border: 1px solid var(--border);
   border-radius: 18px; box-shadow: var(--shadow-lg);
   padding: 20px; display: flex; flex-direction: column; gap: 16px;
-  animation: modalIn calc(0.26s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1);
+  animation: modalIn calc(0.26s * var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1);
 }
 @keyframes modalIn { from { transform: translateY(14px) scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
 .modal header { display: flex; align-items: center; gap: 10px; }
@@ -621,7 +641,7 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: var(--shadow-lg);
   font-size: 13.5px; font-weight: 600;
-  animation: toastIn calc(0.3s / var(--anim-speed)) ease;
+  animation: toastIn calc(0.3s * var(--anim-speed)) ease;
 }
 .toast.warn { border-color: rgba(239, 75, 92, 0.6); }
 .toast.good { border-color: rgba(55, 211, 153, 0.6); }
@@ -631,11 +651,11 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 /* flying chips + winner fx */
 .fly-chip {
   position: fixed; z-index: 70; pointer-events: none;
-  transition: transform calc(0.62s / var(--anim-speed)) cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s;
+  transition: transform calc(0.62s * var(--anim-speed)) cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.3s;
 }
 .sparkle {
   position: fixed; z-index: 68; pointer-events: none; font-size: 20px;
-  animation: sparkleUp calc(1.05s / var(--anim-speed)) ease-out forwards;
+  animation: sparkleUp calc(1.05s * var(--anim-speed)) ease-out forwards;
 }
 @keyframes sparkleUp {
   from { transform: translate(0, 0) scale(0.5); opacity: 1; }
@@ -648,14 +668,27 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
   border: 1px solid var(--gold);
   box-shadow: 0 0 60px rgba(245, 196, 81, 0.35);
   z-index: 8;
-  animation: modalIn calc(0.4s / var(--anim-speed)) cubic-bezier(0.2, 1.3, 0.4, 1);
+  animation: modalIn calc(0.4s * var(--anim-speed)) cubic-bezier(0.2, 1.3, 0.4, 1);
 }
 .winner-banner .big { font-size: 24px; font-weight: 800; color: var(--gold); }
 .winner-banner .sub { font-size: 13px; color: var(--text-dim); }
+/* "TRAIL!" — the category that just won the pot. */
+.winner-banner .hand {
+  font-size: 30px; font-weight: 900; letter-spacing: 0.06em; line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(245, 196, 81, 0.85), 0 2px 0 rgba(0, 0, 0, 0.55);
+  animation: handPop calc(0.55s * var(--anim-speed)) cubic-bezier(0.2, 1.6, 0.35, 1) backwards;
+}
+.winner-banner.monster { border-color: #fff; box-shadow: 0 0 90px rgba(245, 196, 81, 0.65); }
+@keyframes handPop {
+  0% { transform: scale(0.4) rotate(-6deg); opacity: 0; }
+  70% { transform: scale(1.12) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
 
 .reaction-float {
   position: fixed; z-index: 80; pointer-events: none; font-size: 40px;
-  animation: reactionFloat calc(1.5s / var(--anim-speed)) ease-out forwards;
+  animation: reactionFloat calc(1.5s * var(--anim-speed)) ease-out forwards;
 }
 @keyframes reactionFloat {
   0% { transform: translateY(0) scale(0.6); opacity: 0; }
@@ -1540,6 +1573,9 @@ function makeDeck() {
 /**
  * xorshift128 PRNG — deterministic when seeded, which the test-suite relies on.
  * Returns a function producing floats in [0, 1).
+ *
+ * Use this only where reproducibility matters (tests, `/api/replay/:seed`,
+ * scripted demos). Live tables use `createSecureRng()` instead.
  */
 function createRng(seed = Date.now()) {
   let a = (seed >>> 0) || 0x9e3779b9;
@@ -1551,6 +1587,36 @@ function createRng(seed = Date.now()) {
     a = b; b = c; c = d;
     d = (d ^ (d >>> 19)) ^ (t ^ (t >>> 8));
     return (d >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Cryptographically secure RNG backed by `crypto.getRandomValues`.
+ *
+ * A shuffled deck must not be predictable: with a seeded generator (or
+ * `Math.random`, which is also not cryptographic) anyone who can guess the seed
+ * — or observe enough output — can reconstruct every future deal. This is what
+ * a live table uses by default; only tests and replays opt into a seed.
+ *
+ * Values are drawn in blocks of 64 for speed — a single `getRandomValues` call
+ * per card would be a measurable cost on every hand.
+ *
+ * @returns {() => number} floats in [0, 1)
+ */
+function createSecureRng() {
+  const source = globalThis.crypto;
+  if (!source || typeof source.getRandomValues !== 'function') {
+    // Very old browsers without WebCrypto: fall back rather than fail to deal.
+    return createRng(Date.now());
+  }
+  const block = new Uint32Array(64);
+  let cursor = block.length;
+  return function next() {
+    if (cursor >= block.length) {
+      source.getRandomValues(block);
+      cursor = 0;
+    }
+    return block[cursor++] / 4294967296;
   };
 }
 
@@ -1581,6 +1647,7 @@ __exports.makeCard = makeCard;
 __exports.parseCard = parseCard;
 __exports.makeDeck = makeDeck;
 __exports.createRng = createRng;
+__exports.createSecureRng = createSecureRng;
 __exports.shuffle = shuffle;
 __exports.cardLabel = cardLabel;
 });
@@ -1656,26 +1723,60 @@ function descRanks(cards) {
 }
 
 /**
+ * Where the A-2-3 run sits in the sequence ladder — genuine house-rule
+ * territory, so it is configurable.
+ *
+ *   'second' → A-K-Q > A-2-3 > K-Q-J > … > 4-3-2   (the ranking in our rules)
+ *   'lowest' → A-K-Q > K-Q-J > … > 4-3-2 > A-2-3   (the other common house rule)
+ */
+const ACE_LOW = { SECOND: 'second', LOWEST: 'lowest' };
+
+/**
+ * The ranking slice of a table's rules. Every evaluation takes one of these,
+ * so a mode (Classic, Muflis, Joker, …) changes the rules without a second copy
+ * of the evaluator.
+ */
+const DEFAULT_RANKING = Object.freeze({ sequenceAceLow: ACE_LOW.SECOND });
+
+/**
+ * Normalise ranking options. Accepts a whole table config (extra keys are
+ * ignored) so callers can just hand over `table.config`.
+ */
+function rankingOptions(options = {}) {
+  return {
+    sequenceAceLow: options.sequenceAceLow === ACE_LOW.LOWEST ? ACE_LOW.LOWEST : ACE_LOW.SECOND
+  };
+}
+
+/**
  * Sequence detection. Returns the rank value used for comparisons:
  *   - A-K-Q  -> 14 (highest run)
- *   - A-2-3  -> 3  (lowest run, the ace plays low)
+ *   - A-2-3  -> 13.5 when it ranks second, 3 when it ranks last
  *   - otherwise -> the highest card of the run
  * Returns 0 when the cards are not consecutive.
+ *
+ * 13.5 is deliberate: it slots A-2-3 between A-K-Q (14) and K-Q-J (13) without
+ * disturbing any other run's integer key.
  */
-function sequenceHigh(ranks) {
+function sequenceHigh(ranks, options = {}) {
   const [a, b, c] = ranks;
   if (a === 14 && b === 13 && c === 12) return 14;             // A K Q
-  if (a === 14 && b === 3 && c === 2) return 3;                // A 3 2 -> play the 3 high
+  if (a === 14 && b === 3 && c === 2) {
+    return options.sequenceAceLow === ACE_LOW.LOWEST ? 3 : 13.5; // A 3 2
+  }
   if (a === b + 1 && b === c + 1) return a;
   return 0;
 }
 
 /**
  * Evaluate three cards.
+ *
+ * @param {string[]} cards - exactly three card ids.
+ * @param {{sequenceAceLow?: string}} [options] - the table's ranking rules.
  * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
  *            key: number[], name: string, label: string, high: number}}
  */
-function evaluate(cards) {
+function evaluate(cards, options = {}) {
   if (!Array.isArray(cards) || cards.length !== 3) {
     throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
   }
@@ -1689,7 +1790,7 @@ function evaluate(cards) {
 
   // Sort groups by count first, then by rank so pair kickers order correctly.
   const groups = [...counts.entries()].sort((x, y) => (y[1] - x[1]) || (y[0] - x[0]));
-  const run = sequenceHigh(ranks);
+  const run = sequenceHigh(ranks, options);
   const isTrail = groups[0][1] === 3;
 
   let category;
@@ -1762,7 +1863,9 @@ function describe(evaluation) {
 }
 
 function runText(high) {
-  if (high === 3) return 'A-2-3';
+  // 3 = the ace-low run when it ranks last, 13.5 = the same run when it ranks
+  // second. Either way it is printed as A-2-3.
+  if (high === 3 || high === 13.5) return 'A-2-3';
   return `${rankText(high - 2)}-${rankText(high - 1)}-${rankText(high)}`;
 }
 
@@ -1779,19 +1882,23 @@ function compareKeys(a, b) {
 
 /**
  * Compare two hands (arrays of 3 cards, or pre-computed evaluations).
+ *
+ * `options` is only used when a side is given as raw cards — two evaluations
+ * already carry the rules they were computed under.
+ *
  * @returns {number} 1 when a wins, -1 when b wins, 0 on an exact tie.
  */
-function compareHands(a, b) {
-  const evalA = Array.isArray(a) ? evaluate(a) : a;
-  const evalB = Array.isArray(b) ? evaluate(b) : b;
+function compareHands(a, b, options) {
+  const evalA = Array.isArray(a) ? evaluate(a, options) : a;
+  const evalB = Array.isArray(b) ? evaluate(b, options) : b;
   return compareKeys(evalA.key, evalB.key);
 }
 
 /** The strongest hand in a list of {hand, ...} entries. */
-function bestOf(entries) {
+function bestOf(entries, options) {
   let best = null;
   for (const entry of entries) {
-    const evaluation = Array.isArray(entry.cards) ? evaluate(entry.cards) : entry.evaluation;
+    const evaluation = Array.isArray(entry.cards) ? evaluate(entry.cards, options) : entry.evaluation;
     if (!best || compareKeys(evaluation.key, best.evaluation.key) > 0) {
       best = { ...entry, evaluation };
     }
@@ -1836,6 +1943,9 @@ __exports.CATEGORY = CATEGORY;
 __exports.CATEGORY_NAME = CATEGORY_NAME;
 __exports.CATEGORY_LABEL = CATEGORY_LABEL;
 __exports.RANKING_CHART = RANKING_CHART;
+__exports.ACE_LOW = ACE_LOW;
+__exports.DEFAULT_RANKING = DEFAULT_RANKING;
+__exports.rankingOptions = rankingOptions;
 __exports.sequenceHigh = sequenceHigh;
 __exports.evaluate = evaluate;
 __exports.describe = describe;
@@ -1866,13 +1976,18 @@ __define("src/engine/table.js", function (__exports, __require) {
  *     somebody Shows, or when only one player still has chips to bet.
  *   • Showdown compares hands, folds are paid into the pot and all-in players
  *     are protected by side pots.
+ *   • House-rule switches (see DEFAULT_CONFIG) cover how A-2-3 is ranked, a cap
+ *     on how much a single bet may be, how many rounds a player may stay blind,
+ *     a pot limit that forces a show, and what happens when hands tie.
+ *   • Deals are shuffled with `crypto.getRandomValues` unless a seed is given,
+ *     so a live table cannot be predicted from a previous hand.
  *
  * The engine never uses timers itself: the host (server or browser) owns the
  * clock and calls `checkTimeout(now)`. Every mutation appends to `events`,
  * which hosts drain and broadcast — they drive the animations and sounds.
  */
 
-const { makeDeck, shuffle, createRng } = __require("src/engine/cards.js");
+const { makeDeck, shuffle, createRng, createSecureRng } = __require("src/engine/cards.js");
 const { evaluate, compareKeys, CATEGORY_NAME, RANKING_CHART, handStrength } = __require("src/engine/evaluator.js");
 
 const PHASE = {
@@ -1911,6 +2026,45 @@ const DEFAULT_CONFIG = {
   sideShowSeconds: 12,
   /** Allow side shows. */
   sideshow: true,
+  /**
+   * What asking for a side show costs: 'chaal' (your minimum chaal bet — the
+   * usual rule, and it counts as your bet for the round) or 'free'.
+   */
+  sideShowCost: 'chaal',
+  /**
+   * Must the player you ask already have looked at their cards?
+   * false (default) = a blind player who is asked is made to look before the
+   * comparison; true = you may only ask a player who is already seen.
+   */
+  sideShowTargetMustBeSeen: false,
+  /** How A-2-3 is ranked: 'second' (above K-Q-J) or 'lowest' (below 4-3-2). */
+  sequenceAceLow: 'second',
+  /**
+   * Cap on a single bet, as a multiple of the stake: a raise may set the stake
+   * to at most `stake * maxBetMultiple`. At the default 2 that is "blind up to
+   * 2x, seen up to 4x" in the half-rate notation. 0 = no cap (chips only).
+   */
+  maxBetMultiple: 2,
+  /**
+   * Rounds a player may keep playing blind (0 = unlimited). Reaching the limit
+   * makes the player look at their cards at the start of their next turn — they
+   * may still pack afterwards.
+   */
+  maxBlindRounds: 0,
+  /**
+   * Pot size at which every live player is forced to show (0 = no limit).
+   * Without it a hand can only grow as fast as the players' stacks allow.
+   */
+  potLimit: 0,
+  /**
+   * What happens when two showdown hands are exactly equal.
+   * 'requester-loses' = the player who paid for the show loses the pot.
+   * 'split' = the tied players share it.
+   * `showTie` applies to a show somebody asked for, `forcedShowTie` to a show
+   * the table forced (round limit, pot limit, everyone all-in).
+   */
+  showTie: 'requester-loses',
+  forcedShowTie: 'split',
   /** Time source: () => ms. Hosts may inject their own (tests, replay). */
   clock: null,
   /** Minimum raise over the current stake. */
@@ -1976,7 +2130,21 @@ class TeenPattiTable {
     this.turnDeadline = 0;
     this.sideShowDeadline = 0;
     this.sessionStats = new Map();
-    this.rng = this.config.rng || createRng(this.config.seed || this.now());
+    /**
+     * Deal source. A seeded (or injected) generator is only for tests, replays
+     * and scripted demos — a real table must not have a predictable deck, so it
+     * gets the cryptographic generator instead.
+     */
+    this.rng = this.config.rng
+      || (this.config.seed != null ? createRng(this.config.seed) : createSecureRng());
+  }
+
+  /**
+   * The ranking slice of this table's rules, handed to the evaluator so that
+   * every hand is judged under the same house rules.
+   */
+  rankingOptions() {
+    return { sequenceAceLow: this.config.sequenceAceLow };
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
@@ -2152,6 +2320,7 @@ class TeenPattiTable {
     this.events = [];
     this.results = null;
     this.sideShow = null;
+    this.showRequesterId = null;
     this.handNo += 1;
     this.round = 1;
 
@@ -2212,13 +2381,23 @@ class TeenPattiTable {
       players: entrants.map((player) => ({ id: player.id, seat: player.seat, committed: player.committed }))
     });
 
-    this.maybeShowdown();
+    // A table whose pot limit is lower than the boot money is already there
+    // the moment the cards are out — rare, but the rule has to mean something.
+    this.maybePotLimitShow() || this.maybeShowdown();
     return this.handNo;
   }
 
   startTurnClock() {
     this.turnStartedAt = this.now();
     const player = this.turnPlayer;
+    // House rule: you may not hide behind a blind bet forever. Once the limit
+    // is up, the cards are turned over for you at the start of your turn.
+    if (player && !player.seen && this.config.maxBlindRounds > 0 && this.round > this.config.maxBlindRounds) {
+      try {
+        this.see(player.id);
+        this.pushLog(`${player.name} ran out of blind rounds and had to look`);
+      } catch { /* already out of the hand — nothing to do */ }
+    }
     // A player who lost their connection gets a much shorter clock: their seat
     // still plays out the hand, but nobody waits around for them.
     const offline = player && player.connected === false;
@@ -2240,7 +2419,9 @@ class TeenPattiTable {
     player.seen = true;
     player.lastAction = ACTION.SEE;
     this.pushEvent({ type: 'see', playerId: player.id, seat: player.seat });
-    this.pushLog(`${player.name} saw their cards (${player.cards.join(' ')})`);
+    // Never log the cards themselves: the log is part of every snapshot, so
+    // printing them here would hand every opponent the hand at the table.
+    this.pushLog(`${player.name} saw their cards`);
     return player;
   }
 
@@ -2286,7 +2467,7 @@ class TeenPattiTable {
     }
 
     if (player.status === 'playing') player.status = 'playing';
-    if (this.phase === PHASE.BETTING && !this.sideShow) this.advanceTurn();
+    if (this.phase === PHASE.BETTING && !this.sideShow && !this.maybePotLimitShow()) this.advanceTurn();
     return true;
   }
 
@@ -2369,9 +2550,17 @@ class TeenPattiTable {
     return min;
   }
 
+  /**
+   * Highest stake this player may raise to.
+   *
+   * Two ceilings apply: what they can afford (a blind player pays half, so
+   * their stack goes twice as far), and the house cap on how far the stake may
+   * jump in a single bet (`maxBetMultiple` — 2 means "the stake may double").
+   */
   maxRaiseFor(player) {
     const affordable = player.seen ? player.chips : player.chips * 2;
-    const cap = this.config.maxStake > 0 ? Math.min(affordable, this.config.maxStake) : affordable;
+    let cap = this.config.maxStake > 0 ? Math.min(affordable, this.config.maxStake) : affordable;
+    if (this.config.maxBetMultiple > 0) cap = Math.min(cap, this.stake * this.config.maxBetMultiple);
     return Math.max(0, cap);
   }
 
@@ -2444,6 +2633,8 @@ class TeenPattiTable {
     const paid = this.pay(player, cost);
     player.lastAction = ACTION.SHOW;
     this.pending.delete(player.id);
+    // Remembered so an exact tie can be settled against whoever paid for it.
+    this.showRequesterId = player.id;
     this.pushEvent({
       type: 'action',
       action: ACTION.SHOW,
@@ -2460,8 +2651,10 @@ class TeenPattiTable {
     if (!this.config.sideshow) return false;
     if (!player.seen || player.allIn) return false;
     if (this.activePlayers.length < 3) return false;
+    if (this.config.sideShowCost === 'chaal' && player.chips < this.callCost(player)) return false;
     const target = this.playerAt(this.previousActiveSeat(player.seat));
     if (!target || target.id === player.id) return false;
+    if (this.config.sideShowTargetMustBeSeen && !target.seen) return false;
     return target.inHand && !target.packed && !target.allIn;
   }
 
@@ -2474,19 +2667,35 @@ class TeenPattiTable {
     if (!target) throw new Error('No player to compare with');
     if (target.id === player.id) throw new Error('No player to compare with');
     if (target.allIn) throw new Error(`${target.name} is all-in — no side show possible`);
+    if (this.config.sideShowTargetMustBeSeen && !target.seen) {
+      throw new Error(`${target.name} has not seen their cards yet`);
+    }
+
+    // Comparing costs your minimum chaal — and that bet is your action for the
+    // round, so you are not charged twice for the same turn.
+    const cost = this.callCost(player);
+    if (this.config.sideShowCost === 'chaal' && player.chips < cost) {
+      throw new Error(`Not enough chips for a side show (need ${cost}) — go all-in`);
+    }
+    if (this.config.sideShowCost === 'chaal') this.pay(player, cost);
+    this.pending.delete(player.id);
     player.lastAction = ACTION.SIDE_SHOW;
     this.sideShow = {
       requesterId: player.id,
       requesterSeat: player.seat,
       targetId: target.id,
       targetSeat: target.seat,
+      cost: this.config.sideShowCost === 'chaal' ? cost : 0,
       deadline: this.now() + this.config.sideShowSeconds * 1000
     };
     this.sideShowDeadline = this.sideShow.deadline;
     this.pushEvent({ type: 'sideshow:request', ...this.sideShow });
-    this.pushLog(`${player.name} asked ${target.name} for a side show`);
-    // The requester keeps their turn: after the comparison resolves they must
-    // still make a betting decision.
+    this.pushLog(this.sideShow.cost > 0
+      ? `${player.name} paid ${this.sideShow.cost} to ask ${target.name} for a side show`
+      : `${player.name} asked ${target.name} for a side show`);
+    // The comparison is private: only the two players involved ever see the
+    // cards (see respondSideShow), and the requester has already bet, so the
+    // turn moves on once it resolves.
     return this.sideShow;
   }
 
@@ -2502,15 +2711,18 @@ class TeenPattiTable {
     if (!accept) {
       this.pushEvent({ type: 'sideshow:declined', ...request });
       this.pushLog(`${target.name} declined the side show`);
-      if (this.turnSeat === requester.seat) this.startTurnClock();
+      // The requester already bet when they asked, so their turn is over.
+      if (this.turnSeat === requester.seat) this.advanceTurn();
       return null;
     }
 
     // A blind player who is asked to compare must look at their cards first.
     if (!target.seen) this.see(target.id);
 
-    const requesterHand = evaluate(requester.cards);
-    const targetHand = evaluate(target.cards);
+    const ranking = this.rankingOptions();
+    const requesterHand = evaluate(requester.cards, ranking);
+    const targetHand = evaluate(target.cards, ranking);
+    // A tie goes against the requester: they asked for the comparison.
     const winner = compareKeys(requesterHand.key, targetHand.key) > 0 ? requester : target;
     const loser = winner === requester ? target : requester;
     loser.packed = true;
@@ -2527,7 +2739,7 @@ class TeenPattiTable {
       targetCards: target.cards.slice()
     });
     this.pushLog(`${winner.name} won the side show — ${loser.name} packed`);
-    if (this.turnSeat === requester.seat && requester.packed) this.advanceTurn();
+    if (this.turnSeat === requester.seat) this.advanceTurn();
     else if (this.phase === PHASE.BETTING) this.maybeShowdown();
     return { winnerId: winner.id, loserId: loser.id };
   }
@@ -2578,6 +2790,21 @@ class TeenPattiTable {
     if (this.actionablePlayers.length <= 1) return this.showdown('allin');
   }
 
+  /**
+   * Pot limit: once the pot reaches the configured size every live player
+   * shows, so a hand cannot be inflated forever.
+   * @returns {boolean} true when the hand was sent to a showdown.
+   */
+  maybePotLimitShow() {
+    if (this.phase !== PHASE.BETTING) return false;
+    if (this.config.potLimit <= 0) return false;
+    if (this.potTotal < this.config.potLimit) return false;
+    if (this.activePlayers.length < 2) return false;
+    this.pushLog(`Pot limit of ${this.config.potLimit} reached — everyone still in shows`);
+    this.showdown('potlimit');
+    return true;
+  }
+
   /** Timer hook — the host owns the clock. */
   checkTimeout(now = this.now()) {
     if (this.sideShow && now > this.sideShowDeadline) {
@@ -2605,8 +2832,17 @@ class TeenPattiTable {
   // ────────────────────────────────────────────────────────────── showdown ──
 
   /**
+   * Which tie rule applies to a showdown. A show somebody asked and paid for is
+   * the only one that can punish the player who asked for it.
+   * @param {'fold'|'show'|'rounds'|'potlimit'|'allin'} reason
+   */
+  tieRuleFor(reason) {
+    return reason === 'show' ? this.config.showTie : this.config.forcedShowTie;
+  }
+
+  /**
    * Resolve the hand.
-   * @param {'fold'|'show'|'rounds'|'allin'} reason
+   * @param {'fold'|'show'|'rounds'|'potlimit'|'allin'} reason
    */
   showdown(reason) {
     if (this.phase !== PHASE.BETTING) return;
@@ -2615,8 +2851,9 @@ class TeenPattiTable {
     this.turnDeadline = 0;
     const live = this.activePlayers;
 
+    const ranking = this.rankingOptions();
     const evaluations = new Map();
-    for (const player of live) evaluations.set(player.id, evaluate(player.cards));
+    for (const player of live) evaluations.set(player.id, evaluate(player.cards, ranking));
 
     const contributions = new Map();
     for (const player of this.players) if (player.committed > 0) contributions.set(player.id, player.committed);
@@ -2649,7 +2886,19 @@ class TeenPattiTable {
         for (const player of eligible.slice(1)) {
           if (compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) > 0) best = player;
         }
-        const tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        let tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        /**
+         * Tie rule. Somebody paid for this showdown (a `show` request), so an
+         * exact tie goes against them; a showdown the table forced — round
+         * limit, pot limit, everyone all-in — is shared instead.
+         */
+        if (tied.length > 1 && this.tieRuleFor(reason) === 'requester-loses' && this.showRequesterId) {
+          const withoutRequester = tied.filter((player) => player.id !== this.showRequesterId);
+          if (withoutRequester.length) {
+            tied = withoutRequester;
+            this.pushLog(`Exact tie — ${this.getPlayer(this.showRequesterId)?.name} asked for the show and loses it`);
+          }
+        }
         const share = Math.floor(layerPot / tied.length);
         let remainder = layerPot - share * tied.length;
         for (const player of tied) {
@@ -2691,6 +2940,7 @@ class TeenPattiTable {
     this.results = {
       handNo: this.handNo,
       reason,
+      tieRule: this.tieRuleFor(reason),
       pot: potTotal,
       stake: this.stake,
       winners: winners.sort((a, b) => b.amount - a.amount),
@@ -2778,7 +3028,7 @@ class TeenPattiTable {
   /** Ranked strength of the viewer's own hand (used for the "your hand" widget). */
   handInfo(cards) {
     if (!cards || cards.length !== 3) return null;
-    const evaluation = evaluate(cards);
+    const evaluation = evaluate(cards, this.rankingOptions());
     return {
       category: evaluation.category,
       name: evaluation.name,
@@ -2902,6 +3152,11 @@ class TeenPattiTable {
         minRaise: this.config.minRaise,
         maxStake: this.config.maxStake,
         sideshow: this.config.sideshow,
+        sideShowCost: this.config.sideShowCost,
+        maxBetMultiple: this.config.maxBetMultiple,
+        maxBlindRounds: this.config.maxBlindRounds,
+        potLimit: this.config.potLimit,
+        sequenceAceLow: this.config.sequenceAceLow,
         startChips: this.config.startChips,
         minBuyIn: this.config.minBuyIn,
         maxBuyIn: this.config.maxBuyIn
@@ -4497,6 +4752,29 @@ const ACTION_TEXT = {
 
 const REACTIONS = ['👍', '😂', '😮', '🔥', '🎉', '😭', '🤝', '🃏'];
 
+/**
+ * Animation-speed setting: 1 is normal, larger is slower/longer. Shared with
+ * the app shell so the CSS, the audio and the JavaScript timings all agree.
+ */
+const ANIM_SPEED = { slow: 1.6, normal: 1, fast: 0.55 };
+
+/**
+ * Showdown pacing. Hands turn over one at a time — weakest first — and the
+ * cards within a hand a beat apart, so the table can watch the winner appear.
+ * Both are stretched by the animation-speed setting like every other animation.
+ */
+const REVEAL_STEP = 320;     // ms between two players' hands
+const REVEAL_CARD_STEP = 90; // ms between the three cards of one hand
+
+/** Delay in ms before a card turns over. `index` is the card within the hand. */
+function revealDelay(revealIndex, index = 0, speed = 1) {
+  if (revealIndex == null) return index * REVEAL_CARD_STEP * speed;
+  return (revealIndex * REVEAL_STEP + index * REVEAL_CARD_STEP) * speed;
+}
+
+/** Hands worth shouting about: these get the full fanfare. */
+const MONSTER_HANDS = new Set(['Trail', 'Pure Sequence']);
+
 /** Chat messages that are nothing but emoji float over the sender's seat. */
 function isEmojiOnly(text) {
   if (typeof text !== 'string') return false;
@@ -4610,6 +4888,11 @@ class GameView {
 
   // ───────────────────────────────────────────────────────── presentation ──
 
+  /** The animation-speed multiplier from the settings (1 = normal). */
+  animSpeed() {
+    return ANIM_SPEED[this.store?.settings?.animations] || 1;
+  }
+
   render(snapshot, tableInfo) {
     if (!snapshot) return;
     const previous = this.snapshot;
@@ -4641,6 +4924,21 @@ class GameView {
       this.lastTickSecond = null;
       this.sound.turn();
     }
+    // A fresh showdown decides the order the hands turn over: weakest first,
+    // winner last. Doing it here — before the seats render — is what lets the
+    // cards animate in that order instead of all at once.
+    if (snapshot.results) {
+      if (this.revealedHandNo !== snapshot.results.handNo) {
+        this.revealedHandNo = snapshot.results.handNo;
+        this.revealOrder = new Map(
+          [...snapshot.results.rankings].reverse().map((entry, index) => [entry.id, index])
+        );
+      }
+    } else {
+      this.revealedHandNo = null;
+      this.revealOrder = null;
+    }
+
     this.renderSeats(snapshot);
     this.renderMyArea(snapshot);
     this.renderActionBar(snapshot);
@@ -4739,14 +5037,21 @@ class GameView {
       // cards
       const faces = seat.cards || [];
       const previousCount = this.seatAnim.get(seat.id)?.faceCount ?? 0;
-      node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previousCount));
+      const revealIndex = this.revealOrder?.get(seat.id) ?? null;
+      node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previousCount, revealIndex));
       node.refs.hand.hidden = !seat.inHand || (seat.packed && !faces.length);
+      // The winning hand is lifted and ringed in gold at the showdown.
+      node.refs.hand.classList.toggle('winner-hand', Boolean(winners.has(seat.id) && faces.length === 3));
       // A folded hand greys out at the showdown. Derived from state rather than
       // from the transition, so it survives a rebuild and never sticks around
       // into the next hand.
       node.refs.hand.classList.toggle('dim', Boolean(seat.packed) && snapshot.phase === PHASE.SETTLED);
       if (faces.length === 3 && previousCount < 3) {
-        this.sound.flip();
+        // During a showdown the flips are spaced out, and each one is heard as
+        // it happens rather than all at once.
+        const delay = revealDelay(revealIndex, 0, this.animSpeed());
+        if (delay > 0) this.later(() => this.sound.flip(), delay + REVEAL_CARD_STEP);
+        else this.sound.flip();
       }
       this.seatAnim.set(seat.id, { faceCount: faces.length, packed: seat.packed });
 
@@ -4785,14 +5090,16 @@ class GameView {
     }
   }
 
-  seatCards(seat, faces, previousCount) {
+  seatCards(seat, faces, previousCount, revealIndex = null) {
     if (!seat.inHand) return [];
     if (faces.length === 3) {
       return faces.map((card, index) => {
         const node = cardEl(card, { size: 'sm' });
         if (previousCount < 3) {
-          node.classList.add('flip');
-          node.style.animationDelay = `${index * 90}ms`;
+          // `reveal` (showdown) waits its turn before turning over; `flip` is
+          // the plain "I looked at my cards" animation.
+          node.classList.add(revealIndex == null ? 'flip' : 'reveal');
+          node.style.animationDelay = `${revealDelay(revealIndex, index, this.animSpeed())}ms`;
         }
         return node;
       });
@@ -4895,7 +5202,7 @@ class GameView {
     if (strength > 0.6) return `Strong — chaal ${formatChips(cost)} or raise; side show is available when 3+ players remain.`;
     if (strength > 0.35) return `Playable — a call costs ${formatChips(cost)}.`;
     if (snapshot.you.seen && snapshot.you.chips > 0) return `Weak hand — pack (fold) unless you fancy a bluff.`;
-    return 'Cautious — chud pack if the betting gets heavy.';
+    return 'Cautious — pack if the betting gets heavy.';
   }
 
   renderActionBar(snapshot) {
@@ -5058,11 +5365,15 @@ class GameView {
     }
 
     if (options.sideShow) {
+      // Asking costs your minimum chaal, and the button says so up front.
+      const price = snapshot.config.sideShowCost === 'chaal' ? you.costToCall : 0;
       nodes.push(el('button', {
         class: 'btn action',
-        title: 'Compare with the player on your right — the weaker hand packs',
+        title: price > 0
+          ? `Pay ${formatChips(price)} to compare with the player on your right — the weaker hand packs`
+          : 'Compare with the player on your right — the weaker hand packs',
         onclick: () => this.act(ACTION.SIDE_SHOW)
-      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: 'compare' })]));
+      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: price > 0 ? formatChips(price) : 'compare' })]));
     }
 
     bar.replaceChildren(...nodes);
@@ -5293,18 +5604,50 @@ class GameView {
       this.sound.lose();
     }
     const winner = event.winners[0];
+    const compared = event.reason !== 'fold' && event.rankings?.length > 1;
+    // "TRAIL!", "PURE SEQUENCE!" — the hand that won, above the winner's name.
+    const handName = compared ? winner?.hand?.name : null;
     if (winner) {
       this.lastWinner = winner;
-      const banner = el('div', { class: 'winner-banner' }, [
+      const monster = Boolean(handName && MONSTER_HANDS.has(handName));
+      const banner = el('div', { class: `winner-banner${monster ? ' monster' : ''}` }, [
+        handName ? el('div', { class: 'hand', text: `${handName.toUpperCase()}!` }) : null,
         el('div', { class: 'big', text: `${winner.avatar || ''} ${winner.name} wins ${formatChips(winner.amount)}` }),
-        el('div', { class: 'sub', text: event.reason === 'fold' ? 'everyone else packed' : `pot ${formatChips(event.pot)}` })
+        el('div', {
+          class: 'sub',
+          text: event.reason === 'fold'
+            ? 'everyone else packed'
+            : `${winner.hand?.text || handName || 'best hand'} · pot ${formatChips(event.pot)}`
+        })
       ]);
       this.els.winnerHost.replaceChildren(banner);
+      if (monster) this.sparkle(24);
       this.later(() => {
         if (this.els.winnerHost?.contains(banner)) banner.remove();
-      }, 4200);
+      }, 4600);
     }
-    this.showShowdownCards();
+
+    // Let the hands finish turning over before the centre panel claims the pot,
+    // then send the chips from the middle of the table to the winner's seat.
+    const revealMs = this.revealTime();
+    this.later(() => this.showShowdownCards(), revealMs);
+    this.later(() => this.payWinner(event), revealMs + 120);
+  }
+
+  /** How long the staggered showdown reveal takes, in ms. */
+  revealTime() {
+    const hands = this.revealOrder?.size || 1;
+    return (hands * REVEAL_STEP + 3 * REVEAL_CARD_STEP + 220) * this.animSpeed();
+  }
+
+  /** Chips leave the pot and land on the winner's seat. */
+  payWinner(event) {
+    if (!event?.winners?.length) return;
+    const winner = event.winners[0];
+    const seatNode = this.seats.get(winner.id);
+    const pot = Number(event.pot) || 0;
+    const chips = Math.max(3, Math.min(9, 2 + Math.floor(pot / 120)));
+    this.flyChips(this.els.potDisplay, chips, seatNode?.refs?.avatar || seatNode?.el);
   }
 
   /** At showdown the centre of the felt shows the best hand face up. */
@@ -5380,8 +5723,14 @@ class GameView {
     this.floaters.clear();
   }
 
-  flyChips(fromEl, count = 1) {
-    const to = this.els.potDisplay.getBoundingClientRect();
+  /**
+   * Fly chips from one element to another.
+   * @param {HTMLElement} fromEl
+   * @param {number} count
+   * @param {HTMLElement} [toEl] - defaults to the pot in the middle of the felt.
+   */
+  flyChips(fromEl, count = 1, toEl = null) {
+    const to = (toEl || this.els.potDisplay).getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
     for (let i = 0; i < count; i += 1) {
       const chip = el('div', { class: `chip c${[5, 10, 50, 100, 500][Math.floor(Math.random() * 5)]} fly-chip` });
@@ -5493,6 +5842,7 @@ class GameView {
 
 
 
+__exports.ANIM_SPEED = ANIM_SPEED;
 __exports.GameView = GameView;
 __exports.default = GameView;
 });
@@ -5506,7 +5856,7 @@ const { Store, AVATARS } = __require("public/js/store.js");
 const { SoundBoard } = __require("public/js/sound.js");
 const { PracticeController } = __require("public/js/practice.js");
 const { OnlineController } = __require("public/js/net.js");
-const { GameView } = __require("public/js/game-view.js");
+const { GameView, ANIM_SPEED } = __require("public/js/game-view.js");
 const { RANKING_CHART, CATEGORY_LABEL } = __require("src/engine/evaluator.js");
 const { PERSONALITIES } = __require("src/engine/ai.js");
 const { el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSigned, inviteLink, copyToClipboard, isLocalHost } = __require("public/js/ui.js");
@@ -5518,7 +5868,12 @@ const { el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSig
  */
 const STANDALONE = Boolean(window.__TEEN_PATTI_STANDALONE__);
 
-const SPEED = { slow: 1.6, normal: 1, fast: 0.55 };
+/**
+ * 1 = normal, higher = slower. One table of values drives the CSS variable, the
+ * audio cues and the JavaScript animation timings, so "slow" means slow
+ * everywhere instead of only in the sound.
+ */
+const SPEED = ANIM_SPEED;
 
 class App {
   constructor() {

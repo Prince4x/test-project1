@@ -84,6 +84,27 @@ Teen Patti is a **three-card** game (no community cards), so the felt shows the 
 - **Rounds** — a raise resets the round so every live player must answer. After the configured number of rounds a **compulsory show** decides the pot.
 - **Side pots** — all-in players can only win the layers they actually covered.
 - **Turn clock** — 25s by default; players who disconnect get a 4s clock so the table never stalls. Bots never stall: if a decision ever fails, the engine falls back to the safest legal action.
+- **Showdown** — hands turn over one at a time, weakest first, the winning cards are ringed in gold and the pot flies to the winner's seat.
+
+**House rules (all configurable per table)**
+
+Every one of these is a field on `DEFAULT_CONFIG` in `src/engine/table.js`, so a table
+can play by any combination of them without touching the rules code.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `sequenceAceLow` | `'second'` | Where A-2-3 ranks: `'second'` = `A-K-Q > A-2-3 > K-Q-J`, `'lowest'` = below 4-3-2. |
+| `maxBetMultiple` | `2` | A raise may set the stake to at most `stake × this` — i.e. blind up to 2x and seen up to 4x in the half-rate notation. `0` = limited by your stack only. |
+| `maxBlindRounds` | `0` | Rounds a player may keep playing blind; at the limit their cards are turned over for them. `0` = unlimited. |
+| `potLimit` | `0` | Pot size at which everybody still in is forced to show. `0` = no limit. |
+| `sideShowCost` | `'chaal'` | What asking for a side show costs — your minimum chaal, and it counts as your bet for the round. `'free'` for the no-cost house rule. |
+| `sideShowTargetMustBeSeen` | `false` | `true` = you may only ask a player who has already looked; `false` = a blind player who is asked is made to look. |
+| `showTie` | `'requester-loses'` | Exact tie in a show somebody paid for: the player who asked loses. `'split'` shares it. |
+| `forcedShowTie` | `'split'` | Exact tie in a show the table forced (round limit, pot limit, all-in). |
+
+Deals are shuffled with `crypto.getRandomValues`, so a live deck cannot be predicted from
+a previous hand. Pass `seed` (tests, `/api/replay/:seed`, scripted demos) to get a
+reproducible deal instead.
 
 ---
 
@@ -198,8 +219,8 @@ npm run test:engine
 
 | Suite | Covers |
 | --- | --- |
-| `evaluator.test.js` | every hand category, tie-breaks, `A-2-3` vs `A-K-Q`, malformed input |
-| `table.test.js` | boot/dealing, dealer rotation, blind vs seen costs, raise bounds, out-of-turn rejection, side pots, turn timeouts, side shows, showdown reveal, sit-out/rebuy, stats, disconnected clock, injected-clock timers |
+| `evaluator.test.js` | every hand category, tie-breaks, `A-2-3` vs `A-K-Q` under both house rules, malformed input |
+| `table.test.js` | boot/dealing, dealer rotation, blind vs seen costs, raise bounds and the per-bet cap, out-of-turn rejection, side pots, turn timeouts, side shows (cost, blind target, decline), showdown reveal, pot limit, blind-round limit, tie rules, seeded vs unseeded deals, sit-out/rebuy, stats, disconnected clock, injected-clock timers |
 | `rooms.test.js` | bots play real hands (chips conserved, leaderboard is zero-sum), human join/act/leave, friendly errors, chat sanitising, room cleanup |
 | `ws.test.js` | handshake, masked frames, 126-length payloads, bad upgrade paths |
 | `e2e.test.js` | boots the real server, a real WebSocket client joins a table, plays multiple hands, chats and leaves |
@@ -217,6 +238,7 @@ The two DOM suites need the dev dependency (`npm install`) and skip themselves w
 - **No build step.** The browser imports the engine directly from `/engine/*.js`; Node imports the same files from `src/engine/`. One source of truth, zero bundler.
 - **Hand-rolled WebSocket server** (`server/ws.js`) — HTTP upgrade, masking, fragmentation, ping/pong, close frames. Keeps the sandbox-friendly zero-dependency promise.
 - **Sound is synthesised** with oscillators and noise buffers, so there are no audio assets to load.
+- **One animation clock** — `ANIM_SPEED` (exported by `public/js/game-view.js`) drives the CSS `--anim-speed` variable, the audio cue lengths and the JavaScript animation timings, so the slow/normal/fast setting means the same thing everywhere.
 - **Bot personalities** — Rock (tight), Balanced, Shark (pot-odds aware), Maniac (loose). They play blind cheaply, estimate their win rate with a 36-trial Monte-Carlo, bluff occasionally, ask for side shows and call shows with strong hands.
 - **Theme and motion** — night/day felt and slow/normal/fast animation speeds, all driven by CSS custom properties (`--anim-speed` also stretches the audio cues).
 
