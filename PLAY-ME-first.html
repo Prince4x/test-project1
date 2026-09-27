@@ -657,10 +657,15 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .card-reveal {
   animation: cardFlipIn calc(0.5s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1) both;
 }
+/*
+ * Same lesson as .pcard.flip above: the perspective must live inside the
+ * transform. A bare rotateY has no vanishing point, so the card squashes to a
+ * flat line and pops back — the old "glitchy flip" — instead of turning in 3D.
+ */
 @keyframes cardFlipIn {
-  0% { transform: rotateY(90deg) scale(0.7); opacity: 0; }
-  60% { transform: rotateY(-14deg) scale(1.06); opacity: 1; }
-  100% { transform: none; opacity: 1; }
+  0% { transform: perspective(620px) rotateY(88deg) scale(0.8); opacity: 0; }
+  60% { transform: perspective(620px) rotateY(-12deg) scale(1.05); opacity: 1; }
+  100% { transform: perspective(620px) rotateY(0deg) scale(1); opacity: 1; }
 }
 .winning-card {
   box-shadow: 0 0 18px rgba(245, 196, 81, 0.55), 0 0 4px rgba(245, 196, 81, 0.8);
@@ -4790,6 +4795,7 @@ class GameView {
     this.seatSignature = null;
     this.snapshot = null;
     this.seatAnim = new Map();
+    this.myCardsKey = null;
     this.clearFloaters();
     this.els.seats.replaceChildren();
     this.chatLog = [];
@@ -5044,16 +5050,24 @@ class GameView {
     const seatsView = snapshot.seats[you.seat];
     const faces = you.cards?.length === 3 ? you.cards : [];
 
-    if (!faces.length) {
-      const hidden = Math.max(you.cardCount || 0, 0) || (you.inHand ? 3 : 0);
-      this.els.myCards.replaceChildren(...Array.from({ length: hidden }, () => cardEl(null, { size: 'lg' })));
-    } else {
-      this.els.myCards.replaceChildren(...faces.map((card, index) => {
-        const node = cardEl(card, { size: 'lg' });
-        node.classList.add('flip');
-        node.style.animationDelay = `${index * 80}ms`;
-        return node;
-      }));
+    // Rebuild the hole cards only when they actually change. Rebuilding on
+    // every snapshot re-applied the .flip class each time, so the cards kept
+    // flipping for ever — the same class of glitch the seats fixed with
+    // seatAnim. The key covers the hand, the faces and the hidden count.
+    const hidden = faces.length ? 0 : (Math.max(you.cardCount || 0, 0) || (you.inHand ? 3 : 0));
+    const cardsKey = `${snapshot.handNo}|${hidden}|${faces.join(',')}`;
+    if (cardsKey !== this.myCardsKey) {
+      this.myCardsKey = cardsKey;
+      if (!faces.length) {
+        this.els.myCards.replaceChildren(...Array.from({ length: hidden }, () => cardEl(null, { size: 'lg' })));
+      } else {
+        this.els.myCards.replaceChildren(...faces.map((card, index) => {
+          const node = cardEl(card, { size: 'lg' });
+          node.classList.add('flip');
+          node.style.animationDelay = `${index * 80}ms`;
+          return node;
+        }));
+      }
     }
 
     const hand = you.hand;

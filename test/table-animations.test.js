@@ -121,8 +121,15 @@ test('animations do not outlive the table, and a second game still animates', { 
     view.flyChips(document.querySelector('#seats .seat') || document.body, 3);
     const flying = floaters();
     assert.ok(flying > 0, 'animations work again in the second game, not just the first');
-    await sleep(1400);
-    assert.equal(floaters(), 0, 'and they still clean themselves up');
+    // Poll rather than sleep a fixed amount: the removal timers are real
+    // setTimeouts, and under a fully loaded test machine they can land well
+    // after their nominal deadline.
+    let cleaned = false;
+    for (let i = 0; i < 250 && !cleaned; i += 1) {
+      if (floaters() === 0) cleaned = true;
+      else await sleep(40);
+    }
+    assert.ok(cleaned, 'and they still clean themselves up');
 
     // ── 3. an already-visible hand is not re-flipped by a ring rebuild ──────
     let seatId = null;
@@ -165,7 +172,28 @@ test('animations do not outlive the table, and a second game still animates', { 
       'the hand is still shown face-up after the rebuild'
     );
 
-    // ── 4. leaving the table leaves nothing behind ──────────────────────────
+    // ── 4. your own hole cards do not re-flip on every state update ─────────
+    // The regression: renderMyArea rebuilt the hole cards on EVERY snapshot,
+    // re-applying .flip each time, so the player's own cards kept flipping
+    // for ever. With the fix, re-rendering the same state must keep the very
+    // same DOM nodes (no rebuild → no restarted animation).
+    if (document.querySelectorAll('#my-cards .pcard').length === 3) {
+      const beforeCards = [...document.querySelectorAll('#my-cards .pcard')];
+      const handNo = view.snapshot.handNo;
+      view.render(view.snapshot, view.tableInfo);
+      view.render(view.snapshot, view.tableInfo);
+      view.render(view.snapshot, view.tableInfo);
+      if (view.snapshot.handNo === handNo) {
+        const afterCards = [...document.querySelectorAll('#my-cards .pcard')];
+        assert.deepEqual(
+          afterCards.map((node) => beforeCards.includes(node)),
+          [true, true, true],
+          'unchanged hole cards keep their DOM nodes — no rebuild, no repeated flip animation'
+        );
+      }
+    }
+
+    // ── 5. leaving the table leaves nothing behind ──────────────────────────
     app.leaveTable();
     await sleep(300);
     assert.equal(floaters(), 0, 'no chips or sparkles left floating over the lobby');

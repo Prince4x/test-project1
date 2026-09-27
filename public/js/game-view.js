@@ -136,6 +136,7 @@ export class GameView {
     this.seatSignature = null;
     this.snapshot = null;
     this.seatAnim = new Map();
+    this.myCardsKey = null;
     this.clearFloaters();
     this.els.seats.replaceChildren();
     this.chatLog = [];
@@ -390,16 +391,24 @@ export class GameView {
     const seatsView = snapshot.seats[you.seat];
     const faces = you.cards?.length === 3 ? you.cards : [];
 
-    if (!faces.length) {
-      const hidden = Math.max(you.cardCount || 0, 0) || (you.inHand ? 3 : 0);
-      this.els.myCards.replaceChildren(...Array.from({ length: hidden }, () => cardEl(null, { size: 'lg' })));
-    } else {
-      this.els.myCards.replaceChildren(...faces.map((card, index) => {
-        const node = cardEl(card, { size: 'lg' });
-        node.classList.add('flip');
-        node.style.animationDelay = `${index * 80}ms`;
-        return node;
-      }));
+    // Rebuild the hole cards only when they actually change. Rebuilding on
+    // every snapshot re-applied the .flip class each time, so the cards kept
+    // flipping for ever — the same class of glitch the seats fixed with
+    // seatAnim. The key covers the hand, the faces and the hidden count.
+    const hidden = faces.length ? 0 : (Math.max(you.cardCount || 0, 0) || (you.inHand ? 3 : 0));
+    const cardsKey = `${snapshot.handNo}|${hidden}|${faces.join(',')}`;
+    if (cardsKey !== this.myCardsKey) {
+      this.myCardsKey = cardsKey;
+      if (!faces.length) {
+        this.els.myCards.replaceChildren(...Array.from({ length: hidden }, () => cardEl(null, { size: 'lg' })));
+      } else {
+        this.els.myCards.replaceChildren(...faces.map((card, index) => {
+          const node = cardEl(card, { size: 'lg' });
+          node.classList.add('flip');
+          node.style.animationDelay = `${index * 80}ms`;
+          return node;
+        }));
+      }
     }
 
     const hand = you.hand;

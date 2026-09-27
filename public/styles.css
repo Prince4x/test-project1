@@ -643,10 +643,15 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .card-reveal {
   animation: cardFlipIn calc(0.5s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1) both;
 }
+/*
+ * Same lesson as .pcard.flip above: the perspective must live inside the
+ * transform. A bare rotateY has no vanishing point, so the card squashes to a
+ * flat line and pops back — the old "glitchy flip" — instead of turning in 3D.
+ */
 @keyframes cardFlipIn {
-  0% { transform: rotateY(90deg) scale(0.7); opacity: 0; }
-  60% { transform: rotateY(-14deg) scale(1.06); opacity: 1; }
-  100% { transform: none; opacity: 1; }
+  0% { transform: perspective(620px) rotateY(88deg) scale(0.8); opacity: 0; }
+  60% { transform: perspective(620px) rotateY(-12deg) scale(1.05); opacity: 1; }
+  100% { transform: perspective(620px) rotateY(0deg) scale(1); opacity: 1; }
 }
 .winning-card {
   box-shadow: 0 0 18px rgba(245, 196, 81, 0.55), 0 0 4px rgba(245, 196, 81, 0.8);
