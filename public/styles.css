@@ -694,6 +694,19 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .reaction-bar button { font-size: 19px; padding: 6px 9px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); }
 .reaction-bar button:hover { background: var(--gold-soft); }
 
+/* animation diagnostic probe (bottom-left corner) */
+.anim-probe {
+  position: fixed; left: 8px; bottom: 8px; z-index: 200;
+  font-family: ui-monospace, monospace; font-size: 10px;
+  padding: 2px 7px; border-radius: 8px; pointer-events: none;
+  color: rgba(255, 255, 255, 0.45); background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.anim-probe.alert {
+  color: #fff; background: rgba(179, 38, 30, 0.92); border-color: #ff8b8b;
+  font-weight: 700; pointer-events: none;
+}
+
 /* game mode picker */
 .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .mode-card {

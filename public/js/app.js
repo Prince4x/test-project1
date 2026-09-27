@@ -22,7 +22,20 @@ import {
  */
 const STANDALONE = Boolean(window.__TEEN_PATTI_STANDALONE__);
 
-const SPEED = { slow: 1.6, normal: 1, fast: 0.55 };
+/**
+ * --anim-speed DIVIDES every CSS duration (calc(0.5s / var(--anim-speed))),
+ * so a bigger number means snappier. These were inverted for a while —
+ * "fast" made every card flip ~2x longer and floatier, which read as a
+ * permanent animation glitch at busy moments (deals overlapping flips).
+ */
+const SPEED = { slow: 0.55, normal: 1, fast: 1.6 };
+
+/**
+ * Build stamp: printed to the console, exposed on <body data-build> and shown
+ * in the corner probe, so "is this tab running the new code?" takes two
+ * seconds to answer. Bump when shipping a fix a player needs to verify.
+ */
+export const CLIENT_BUILD = '2026-09-27d';
 
 class App {
   constructor() {
@@ -157,6 +170,7 @@ class App {
     this.bindGlobal();
     this.renderLeaderboard([]);
     this.loadNetwork();
+    this.initAnimProbe();
 
     const url = new URL(window.location.href);
     const wanted = url.searchParams.get('table');
@@ -347,6 +361,50 @@ class App {
   applySpeed(speed) {
     document.documentElement.style.setProperty('--anim-speed', String(SPEED[speed] || 1));
     this.sound.setSpeed(SPEED[speed] || 1);
+  }
+
+  /**
+   * Live animation diagnostic. `animationstart` is the ground truth for CSS
+   * animation (re)starts, so this counts card animations (deal-in, flips,
+   * showdown reveals) in a rolling 5-second window:
+   *   - grey badge  "🎞 ok · <build>"  — healthy, and confirms the build;
+   *   - red badge   with a per-name breakdown — something is restarting
+   *     animations in a loop; the last few offending elements are logged.
+   * A full 6-player deal is ~18 starts, so 45+ per 5s means a genuine loop.
+   */
+  initAnimProbe() {
+    if (document.querySelector('.anim-probe')) return;
+    const badge = el('div', { class: 'anim-probe', text: `🎞 ok · ${CLIENT_BUILD}` });
+    document.body.appendChild(badge);
+    const CARD_ANIMS = new Set(['dealIn', 'flipIn', 'cardFlipIn']);
+    const recent = [];
+    const lastTargets = [];
+    document.addEventListener('animationstart', (event) => {
+      if (!CARD_ANIMS.has(event.animationName)) return;
+      recent.push({ at: Date.now(), name: event.animationName });
+      const target = event.target;
+      const where = target.closest?.('#my-cards') ? 'my-cards'
+        : target.closest?.('.seat-hand') ? 'seat'
+        : target.closest?.('#deal-area') ? 'showdown' : 'other';
+      lastTargets.push(`${event.animationName}@${where}`);
+      if (lastTargets.length > 12) lastTargets.shift();
+    });
+    const probeTimer = setInterval(() => {
+      const cutoff = Date.now() - 5000;
+      while (recent.length && recent[0].at < cutoff) recent.shift();
+      if (recent.length > 45) {
+        const byName = {};
+        for (const entry of recent) byName[entry.name] = (byName[entry.name] || 0) + 1;
+        const detail = Object.entries(byName).map(([name, count]) => `${name}:${count}`).join(' ');
+        badge.textContent = `🎞 LOOP ${recent.length}/5s · ${detail} · ${CLIENT_BUILD}`;
+        badge.classList.add('alert');
+        console.warn(`[anim-probe] ${recent.length} card animation starts in 5s — recent: ${lastTargets.join(', ')}`);
+      } else {
+        badge.textContent = `🎞 ok · ${CLIENT_BUILD}`;
+        badge.classList.remove('alert');
+      }
+    }, 1000);
+    probeTimer.unref?.();
   }
 
   renderProfileChip() {
@@ -1157,12 +1215,6 @@ class App {
   }
 }
 
-/**
- * Build stamp: shows up in the console and on <body data-build> so "is the
- * browser actually running the new code?" is answerable in two seconds.
- * Bump when shipping a fix a player needs to verify.
- */
-export const CLIENT_BUILD = '2026-09-27c';
 try {
   document.body.dataset.build = CLIENT_BUILD;
   console.info(`🎴 Teen Patti Arena — client build ${CLIENT_BUILD}`);
