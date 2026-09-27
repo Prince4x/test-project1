@@ -99,7 +99,7 @@ button { cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
-  backdrop-filter: blur(14px);
+  /* No blur: its content changes during play; see the note above .game-top. */
 }
 
 .pill {
@@ -291,11 +291,16 @@ body[data-theme='light'] .lobby-top { background: linear-gradient(180deg, rgba(2
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border);
-  background: rgba(10, 15, 20, 0.62);
-  backdrop-filter: blur(12px);
+  /*
+   * No backdrop-filter on any surface whose content changes during play:
+   * blur forces the GPU to repaint the entire surface (and everything on
+   * it) whenever a pill or a chip count updates — which looked like the
+   * whole board flickering on every single chaal.
+   */
+  background: rgba(10, 15, 20, 0.88);
   z-index: 12;
 }
-body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
+body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
 .game-top .title { display: flex; flex-direction: column; }
 .game-top .title b { font-size: 15px; }
 .game-top .title span { font-size: 11.5px; color: var(--text-faint); }
@@ -348,10 +353,9 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
 .pot-display {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 18px; border-radius: 999px;
-  background: rgba(0, 0, 0, 0.42);
+  background: rgba(0, 0, 0, 0.62);
   border: 1px solid rgba(245, 196, 81, 0.35);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(6px);
 }
 .pot-display .pot-value { font-size: 23px; font-weight: 800; color: var(--gold); letter-spacing: -0.01em; }
 .pot-display .pot-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.6); }
@@ -387,10 +391,9 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px;
   border-radius: 14px;
-  background: rgba(6, 18, 14, 0.72);
+  background: rgba(6, 18, 14, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: var(--shadow-md);
-  backdrop-filter: blur(8px);
   transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
 }
 .seat.winner .seat-card { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-soft), 0 0 40px rgba(245, 196, 81, 0.4); }
@@ -503,8 +506,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.78); }
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(10, 15, 20, 0.72), rgba(10, 15, 20, 0.94));
-  backdrop-filter: blur(12px);
+  background: linear-gradient(180deg, rgba(10, 15, 20, 0.92), rgba(10, 15, 20, 0.97));
   z-index: 12;
 }
 body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), #fff); }
@@ -6194,7 +6196,7 @@ const SPEED = { slow: 0.55, normal: 1, fast: 1.6 };
  * in the corner probe, so "is this tab running the new code?" takes two
  * seconds to answer. Bump when shipping a fix a player needs to verify.
  */
-const CLIENT_BUILD = '2026-09-27f';
+const CLIENT_BUILD = '2026-09-27g';
 
 class App {
   constructor() {

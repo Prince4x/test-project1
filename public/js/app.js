@@ -35,7 +35,7 @@ const SPEED = { slow: 0.55, normal: 1, fast: 1.6 };
  * in the corner probe, so "is this tab running the new code?" takes two
  * seconds to answer. Bump when shipping a fix a player needs to verify.
  */
-export const CLIENT_BUILD = '2026-09-27f';
+export const CLIENT_BUILD = '2026-09-27g';
 
 class App {
   constructor() {
