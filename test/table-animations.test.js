@@ -119,7 +119,13 @@ test('animations do not outlive the table, and a second game still animates', { 
     assert.equal(view.destroyed, false, 'and is not stuck in the destroyed state');
 
     view.flyChips(document.querySelector('#seats .seat') || document.body, 3);
-    const flying = floaters();
+    // Chip launches measure their route inside a frame now, so give the
+    // scheduler a beat before expecting them on screen.
+    let flying = 0;
+    for (let i = 0; i < 50 && !flying; i += 1) {
+      flying = floaters();
+      if (!flying) await sleep(20);
+    }
     assert.ok(flying > 0, 'animations work again in the second game, not just the first');
     // Poll rather than sleep a fixed amount: the removal timers are real
     // setTimeouts, and under a fully loaded test machine they can land well

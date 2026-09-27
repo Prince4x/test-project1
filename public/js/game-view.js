@@ -142,6 +142,7 @@ export class GameView {
     this.myCardsKey = null;
     this.actionBarKey = null;
     this.potChipsKey = null;
+    this.historyKey = null;
     this.clearFloaters();
     this.els.seats.replaceChildren();
     this.chatLog = [];
@@ -688,6 +689,12 @@ export class GameView {
 
   renderHistory(snapshot) {
     const history = snapshot.history || [];
+    // The full list was rebuilt on EVERY state update — a growing list,
+    // re-laid-out on each action, even while the drawer was closed. Only
+    // rebuild when a hand finishes (or on first render).
+    const key = `${history.length}:${history[0]?.handNo ?? 0}`;
+    if (key === this.historyKey) return;
+    this.historyKey = key;
     if (!history.length) {
       this.els.historyBody.replaceChildren(el('p', { class: 'muted tiny', text: 'No hands finished yet.' }));
     } else {
@@ -1044,6 +1051,12 @@ export class GameView {
   }
 
   flyChips(fromEl, count = 1) {
+    // Rect reads happen inside a frame: measuring right after the render's
+    // DOM writes forces a synchronous re-layout on every single action.
+    this.frame(() => this.launchChips(fromEl, count));
+  }
+
+  launchChips(fromEl, count) {
     const to = this.els.potDisplay.getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
     for (let i = 0; i < count; i += 1) {

@@ -94,6 +94,8 @@ button { cursor: pointer; }
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
+  /* fixed-width digits: 'Pot 120' -> 'Pot 140' must not nudge its neighbours */
+  font-variant-numeric: tabular-nums;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid var(--border);
   font-size: 12.5px;
@@ -706,6 +708,10 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 }
 .anim-probe.alert {
   color: #fff; background: rgba(179, 38, 30, 0.92); border-color: #ff8b8b;
+  font-weight: 700; pointer-events: none;
+}
+.anim-probe.warn {
+  color: #14202b; background: rgba(245, 196, 81, 0.92); border-color: #ffd977;
   font-weight: 700; pointer-events: none;
 }
 

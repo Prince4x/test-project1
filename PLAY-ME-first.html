@@ -108,6 +108,8 @@ button { cursor: pointer; }
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
+  /* fixed-width digits: 'Pot 120' -> 'Pot 140' must not nudge its neighbours */
+  font-variant-numeric: tabular-nums;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid var(--border);
   font-size: 12.5px;
@@ -720,6 +722,10 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 }
 .anim-probe.alert {
   color: #fff; background: rgba(179, 38, 30, 0.92); border-color: #ff8b8b;
+  font-weight: 700; pointer-events: none;
+}
+.anim-probe.warn {
+  color: #14202b; background: rgba(245, 196, 81, 0.92); border-color: #ffd977;
   font-weight: 700; pointer-events: none;
 }
 
@@ -5122,6 +5128,7 @@ class GameView {
     this.myCardsKey = null;
     this.actionBarKey = null;
     this.potChipsKey = null;
+    this.historyKey = null;
     this.clearFloaters();
     this.els.seats.replaceChildren();
     this.chatLog = [];
@@ -5668,6 +5675,12 @@ class GameView {
 
   renderHistory(snapshot) {
     const history = snapshot.history || [];
+    // The full list was rebuilt on EVERY state update — a growing list,
+    // re-laid-out on each action, even while the drawer was closed. Only
+    // rebuild when a hand finishes (or on first render).
+    const key = `${history.length}:${history[0]?.handNo ?? 0}`;
+    if (key === this.historyKey) return;
+    this.historyKey = key;
     if (!history.length) {
       this.els.historyBody.replaceChildren(el('p', { class: 'muted tiny', text: 'No hands finished yet.' }));
     } else {
@@ -6024,6 +6037,12 @@ class GameView {
   }
 
   flyChips(fromEl, count = 1) {
+    // Rect reads happen inside a frame: measuring right after the render's
+    // DOM writes forces a synchronous re-layout on every single action.
+    this.frame(() => this.launchChips(fromEl, count));
+  }
+
+  launchChips(fromEl, count) {
     const to = this.els.potDisplay.getBoundingClientRect();
     const from = fromEl.getBoundingClientRect();
     for (let i = 0; i < count; i += 1) {
@@ -6175,7 +6194,7 @@ const SPEED = { slow: 0.55, normal: 1, fast: 1.6 };
  * in the corner probe, so "is this tab running the new code?" takes two
  * seconds to answer. Bump when shipping a fix a player needs to verify.
  */
-const CLIENT_BUILD = '2026-09-27e';
+const CLIENT_BUILD = '2026-09-27f';
 
 class App {
   constructor() {
@@ -6529,6 +6548,29 @@ class App {
       lastTargets.push(`${event.animationName}@${where}`);
       if (lastTargets.length > 12) lastTargets.shift();
     });
+    // Layout shifts are the "board flicks/jumps" ground truth. The observer
+    // names the exact elements that moved, so a report from any machine
+    // pinpoints the offender.
+    let shiftScore = 0;
+    const shiftSources = [];
+    try {
+      const shiftObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.hadRecentInput) continue;
+          shiftScore += entry.value;
+          for (const source of entry.sources || []) {
+            const node = source.node;
+            if (node?.nodeType === 1) {
+              const label = `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${node.classList?.[0] ? `.${node.classList[0]}` : ''}`;
+              if (shiftSources[shiftSources.length - 1] !== label) shiftSources.push(label);
+              if (shiftSources.length > 6) shiftSources.shift();
+            }
+          }
+        }
+      });
+      shiftObserver.observe({ type: 'layout-shift', buffered: false });
+    } catch { /* browser without layout-shift support */ }
+
     const probeTimer = setInterval(() => {
       const cutoff = Date.now() - 5000;
       while (recent.length && recent[0].at < cutoff) recent.shift();
@@ -6537,12 +6579,17 @@ class App {
         for (const entry of recent) byName[entry.name] = (byName[entry.name] || 0) + 1;
         const detail = Object.entries(byName).map(([name, count]) => `${name}:${count}`).join(' ');
         badge.textContent = `🎞 LOOP ${recent.length}/5s · ${detail} · ${CLIENT_BUILD}`;
-        badge.classList.add('alert');
+        badge.className = 'anim-probe alert';
         console.warn(`[anim-probe] ${recent.length} card animation starts in 5s — recent: ${lastTargets.join(', ')}`);
+      } else if (shiftScore > 0.01) {
+        badge.textContent = `🎞 shift ${shiftScore.toFixed(3)} · ${shiftSources.join(' ') || '?'} · ${CLIENT_BUILD}`;
+        badge.className = 'anim-probe warn';
+        console.warn(`[anim-probe] layout shift ${shiftScore.toFixed(4)} — moved: ${shiftSources.join(', ')}`);
       } else {
         badge.textContent = `🎞 ok · ${CLIENT_BUILD}`;
-        badge.classList.remove('alert');
+        badge.className = 'anim-probe';
       }
+      shiftScore *= 0.4; // decay so old shifts fade from the badge
     }, 1000);
     probeTimer.unref?.();
   }

@@ -35,7 +35,7 @@ const SPEED = { slow: 0.55, normal: 1, fast: 1.6 };
  * in the corner probe, so "is this tab running the new code?" takes two
  * seconds to answer. Bump when shipping a fix a player needs to verify.
  */
-export const CLIENT_BUILD = '2026-09-27e';
+export const CLIENT_BUILD = '2026-09-27f';
 
 class App {
   constructor() {
@@ -389,6 +389,29 @@ class App {
       lastTargets.push(`${event.animationName}@${where}`);
       if (lastTargets.length > 12) lastTargets.shift();
     });
+    // Layout shifts are the "board flicks/jumps" ground truth. The observer
+    // names the exact elements that moved, so a report from any machine
+    // pinpoints the offender.
+    let shiftScore = 0;
+    const shiftSources = [];
+    try {
+      const shiftObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.hadRecentInput) continue;
+          shiftScore += entry.value;
+          for (const source of entry.sources || []) {
+            const node = source.node;
+            if (node?.nodeType === 1) {
+              const label = `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${node.classList?.[0] ? `.${node.classList[0]}` : ''}`;
+              if (shiftSources[shiftSources.length - 1] !== label) shiftSources.push(label);
+              if (shiftSources.length > 6) shiftSources.shift();
+            }
+          }
+        }
+      });
+      shiftObserver.observe({ type: 'layout-shift', buffered: false });
+    } catch { /* browser without layout-shift support */ }
+
     const probeTimer = setInterval(() => {
       const cutoff = Date.now() - 5000;
       while (recent.length && recent[0].at < cutoff) recent.shift();
@@ -397,12 +420,17 @@ class App {
         for (const entry of recent) byName[entry.name] = (byName[entry.name] || 0) + 1;
         const detail = Object.entries(byName).map(([name, count]) => `${name}:${count}`).join(' ');
         badge.textContent = `🎞 LOOP ${recent.length}/5s · ${detail} · ${CLIENT_BUILD}`;
-        badge.classList.add('alert');
+        badge.className = 'anim-probe alert';
         console.warn(`[anim-probe] ${recent.length} card animation starts in 5s — recent: ${lastTargets.join(', ')}`);
+      } else if (shiftScore > 0.01) {
+        badge.textContent = `🎞 shift ${shiftScore.toFixed(3)} · ${shiftSources.join(' ') || '?'} · ${CLIENT_BUILD}`;
+        badge.className = 'anim-probe warn';
+        console.warn(`[anim-probe] layout shift ${shiftScore.toFixed(4)} — moved: ${shiftSources.join(', ')}`);
       } else {
         badge.textContent = `🎞 ok · ${CLIENT_BUILD}`;
-        badge.classList.remove('alert');
+        badge.className = 'anim-probe';
       }
+      shiftScore *= 0.4; // decay so old shifts fade from the badge
     }, 1000);
     probeTimer.unref?.();
   }
