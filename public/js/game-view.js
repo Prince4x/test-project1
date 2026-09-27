@@ -417,7 +417,7 @@ export class GameView {
     } else if (you.inHand && !you.seen) {
       this.els.myHandName.textContent = 'Playing blind 👁';
       this.els.myHandName.style.color = 'var(--blue)';
-      this.els.myHandNote.textContent = `Blind bets cost half (${formatChips(snapshot.blindCost)}) — see your cards any time`;
+      this.els.myHandNote.textContent = `Blind bets cost half a chaal (${formatChips(snapshot.blindCost)}) — see your cards any time`;
     } else {
       this.els.myHandName.textContent = seatsView?.packed ? 'You packed this hand' : 'No cards';
       this.els.myHandNote.textContent = '';
@@ -596,9 +596,9 @@ export class GameView {
     if (options.sideShow) {
       nodes.push(el('button', {
         class: 'btn action',
-        title: 'Compare with the player on your right — the weaker hand packs',
+        title: 'Pay your chaal to compare with the player on your right — the weaker hand packs, ties pack you',
         onclick: () => this.act(ACTION.SIDE_SHOW)
-      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: 'compare' })]));
+      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: formatChips(options.sideShowCost || 0) })]));
     }
 
     bar.replaceChildren(...nodes);
@@ -644,9 +644,9 @@ export class GameView {
       el('h4', { style: { marginTop: '6px' }, text: 'Table rules in play' }),
       el('ul', { class: 'rule-list' }, [
         el('li', { html: '<b>Boot</b> — everyone posts the ante to be dealt three cards.' }),
-        el('li', { html: '<b>Blind vs Seen</b> — blind players bet half the stake; looking at your cards switches you to full chaal.' }),
-        el('li', { html: '<b>Chaal</b> — match the current stake to stay in. A raise must beat the last stake.' }),
-        el('li', { html: '<b>Side show</b> — with 3+ live players, compare with your right-hand neighbour; the weaker hand packs.' }),
+        el('li', { html: '<b>Blind vs Seen</b> — a blind player bets 1x–2x the current stake; once you look at your cards you pay chaal rate, 2x–4x the stake.' }),
+        el('li', { html: '<b>Chaal</b> — match to stay in. A raise lifts the stake, at most double per turn.' }),
+        el('li', { html: '<b>Side show</b> — with 3+ live players, pay your chaal to compare with the seen player on your right; the weaker hand packs, ties pack the asker.' }),
         el('li', { html: '<b>Show</b> — heads-up, pay the show cost and compare immediately.' }),
         el('li', { html: '<b>Compulsory show</b> — after the configured number of rounds everybody still in reveals and the best hand wins.' })
       ]),
@@ -841,6 +841,33 @@ export class GameView {
       }, 4200);
     }
     this.showShowdownCards();
+    this.showHandSplash(event);
+  }
+
+  /**
+   * Showdown drama: a big "TRAIL!"-style splash for the winning hand,
+   * timed to land just after the staggered card reveal finishes.
+   * Only for real showdowns — a fold win reveals nothing to celebrate.
+   */
+  showHandSplash(event) {
+    if (event.reason === 'fold') return;
+    const snapshot = this.snapshot;
+    const best = snapshot?.results?.rankings?.[0];
+    if (!best?.hand?.name) return;
+    const revealDone = 3 * 260 + 320; // three flips + a beat
+    // Pair and better gets the splash; a High Card win stays understated.
+    const worthy = best.hand.category >= 1;
+    if (!worthy) return;
+    this.later(() => {
+      if (this.destroyed) return;
+      const splash = el('div', {
+        class: `hand-splash ${best.hand.category >= 4 ? 'epic' : ''}`,
+        text: `${best.hand.name.toUpperCase()}!`
+      });
+      this.els.winnerHost.appendChild(splash);
+      if (best.hand.category >= 4) this.sparkle(18); // pure sequence & trail rain sparks
+      this.later(() => splash.remove(), 2400);
+    }, revealDone);
   }
 
   /** At showdown the centre of the felt shows the best hand face up. */
@@ -850,9 +877,19 @@ export class GameView {
     const best = snapshot.results.rankings[0];
     if (!best) return;
     const cards = snapshot.results.reveal.find((entry) => entry.id === best.id)?.cards || [];
+    const isRealShowdown = snapshot.results.reason !== 'fold';
     this.els.dealArea.replaceChildren(el('div', { class: 'card-panel', style: { padding: '10px 14px', textAlign: 'center' } }, [
       el('div', { class: 'tiny muted', text: best.name }),
-      el('div', { class: 'row', style: { gap: '6px', justifyContent: 'center', margin: '6px 0' } }, cards.map((card) => cardEl(card, { size: 'md' }))),
+      el('div', { class: 'row', style: { gap: '6px', justifyContent: 'center', margin: '6px 0' } },
+        cards.map((card, index) => {
+          const node = cardEl(card, { size: 'md' });
+          // Slow, staggered reveal + gold glow on the winning cards.
+          if (isRealShowdown) {
+            node.classList.add('card-reveal', 'winning-card');
+            node.style.animationDelay = `${index * 260}ms`;
+          }
+          return node;
+        })),
       el('div', { style: { fontWeight: '700', color: 'var(--gold)' }, text: `${best.hand.text} · ${formatChips(best.committed)} in` })
     ]));
   }

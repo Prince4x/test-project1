@@ -639,6 +639,42 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .winner-banner .big { font-size: 24px; font-weight: 800; color: var(--gold); }
 .winner-banner .sub { font-size: 13px; color: var(--text-dim); }
 
+/* showdown drama: staggered card flip + winning-hand glow + category splash */
+.card-reveal {
+  animation: cardFlipIn calc(0.5s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+@keyframes cardFlipIn {
+  0% { transform: rotateY(90deg) scale(0.7); opacity: 0; }
+  60% { transform: rotateY(-14deg) scale(1.06); opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+.winning-card {
+  box-shadow: 0 0 18px rgba(245, 196, 81, 0.55), 0 0 4px rgba(245, 196, 81, 0.8);
+  border-color: var(--gold) !important;
+}
+.hand-splash {
+  position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%);
+  z-index: 9; pointer-events: none;
+  font-size: 44px; font-weight: 900; letter-spacing: 2px; white-space: nowrap;
+  color: var(--gold);
+  text-shadow: 0 0 24px rgba(245, 196, 81, 0.8), 0 3px 0 rgba(0, 0, 0, 0.45);
+  animation: handSplash calc(2.4s / var(--anim-speed)) cubic-bezier(0.2, 1.4, 0.35, 1) both;
+}
+.hand-splash.epic {
+  font-size: 58px;
+  background: linear-gradient(180deg, #fff3c9, var(--gold) 55%, #b47f18);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 26px rgba(245, 196, 81, 0.9)) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.4));
+}
+@keyframes handSplash {
+  0% { transform: translate(-50%, -50%) scale(0.2) rotate(-6deg); opacity: 0; }
+  18% { transform: translate(-50%, -50%) scale(1.25) rotate(2deg); opacity: 1; }
+  30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -55%) scale(1.1); opacity: 0; }
+}
+
 .reaction-float {
   position: fixed; z-index: 80; pointer-events: none; font-size: 40px;
   animation: reactionFloat calc(1.5s / var(--anim-speed)) ease-out forwards;

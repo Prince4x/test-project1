@@ -653,6 +653,42 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .winner-banner .big { font-size: 24px; font-weight: 800; color: var(--gold); }
 .winner-banner .sub { font-size: 13px; color: var(--text-dim); }
 
+/* showdown drama: staggered card flip + winning-hand glow + category splash */
+.card-reveal {
+  animation: cardFlipIn calc(0.5s / var(--anim-speed)) cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+@keyframes cardFlipIn {
+  0% { transform: rotateY(90deg) scale(0.7); opacity: 0; }
+  60% { transform: rotateY(-14deg) scale(1.06); opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+.winning-card {
+  box-shadow: 0 0 18px rgba(245, 196, 81, 0.55), 0 0 4px rgba(245, 196, 81, 0.8);
+  border-color: var(--gold) !important;
+}
+.hand-splash {
+  position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%);
+  z-index: 9; pointer-events: none;
+  font-size: 44px; font-weight: 900; letter-spacing: 2px; white-space: nowrap;
+  color: var(--gold);
+  text-shadow: 0 0 24px rgba(245, 196, 81, 0.8), 0 3px 0 rgba(0, 0, 0, 0.45);
+  animation: handSplash calc(2.4s / var(--anim-speed)) cubic-bezier(0.2, 1.4, 0.35, 1) both;
+}
+.hand-splash.epic {
+  font-size: 58px;
+  background: linear-gradient(180deg, #fff3c9, var(--gold) 55%, #b47f18);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 26px rgba(245, 196, 81, 0.9)) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.4));
+}
+@keyframes handSplash {
+  0% { transform: translate(-50%, -50%) scale(0.2) rotate(-6deg); opacity: 0; }
+  18% { transform: translate(-50%, -50%) scale(1.25) rotate(2deg); opacity: 1; }
+  30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -55%) scale(1.1); opacity: 0; }
+}
+
 .reaction-float {
   position: fixed; z-index: 80; pointer-events: none; font-size: 40px;
   animation: reactionFloat calc(1.5s / var(--anim-speed)) ease-out forwards;
@@ -1418,7 +1454,7 @@ body[data-theme='light'] .share-bar .share-url { background: #fff; }
       <div class="hole-cards" id="my-cards"></div>
       <div class="hand-label">
         <b id="my-hand-name">Cards not seen</b>
-        <span id="my-hand-note">You are playing blind — bets cost half</span>
+        <span id="my-hand-note">You are playing blind — bets cost half a chaal</span>
       </div>
     </div>
     <div class="action-bar" id="action-bar"></div>
@@ -1554,8 +1590,26 @@ function createRng(seed = Date.now()) {
   };
 }
 
-/** Fisher-Yates shuffle. Pass a seeded rng for reproducible deals. */
-function shuffle(cards, rng = Math.random) {
+/**
+ * Cryptographically secure random floats in [0, 1).
+ *
+ * Real deals must not be predictable, so the default shuffle draws from the
+ * platform CSPRNG (`crypto.getRandomValues` — available in every browser and
+ * in Node 20+). Falls back to Math.random only when no crypto is available
+ * (ancient embedded WebViews), because a playable game beats a hard crash.
+ */
+function secureRandom() {
+  const cryptoObj = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
+  if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    const buffer = new Uint32Array(1);
+    cryptoObj.getRandomValues(buffer);
+    return buffer[0] / 4294967296;
+  }
+  return Math.random();
+}
+
+/** Fisher-Yates shuffle. Uses the CSPRNG by default; pass a seeded rng for reproducible deals. */
+function shuffle(cards, rng = secureRandom) {
   const out = cards.slice();
   for (let i = out.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rng() * (i + 1));
@@ -1581,6 +1635,7 @@ __exports.makeCard = makeCard;
 __exports.parseCard = parseCard;
 __exports.makeDeck = makeDeck;
 __exports.createRng = createRng;
+__exports.secureRandom = secureRandom;
 __exports.shuffle = shuffle;
 __exports.cardLabel = cardLabel;
 });
@@ -1656,11 +1711,13 @@ function descRanks(cards) {
 }
 
 /**
- * Sequence detection. Returns the rank value used for comparisons:
+ * Sequence detection. Returns the *natural* high card of the run:
  *   - A-K-Q  -> 14 (highest run)
- *   - A-2-3  -> 3  (lowest run, the ace plays low)
+ *   - A-2-3  -> 3  (the ace plays low)
  *   - otherwise -> the highest card of the run
  * Returns 0 when the cards are not consecutive.
+ *
+ * Where A-2-3 *ranks* among the runs is a house rule — see runOrderValue().
  */
 function sequenceHigh(ranks) {
   const [a, b, c] = ranks;
@@ -1671,14 +1728,42 @@ function sequenceHigh(ranks) {
 }
 
 /**
+ * House-rule options for where the A-2-3 run ranks. Configurable because
+ * home games disagree; both orders exist in the wild.
+ *   - 'a23-second' (default): A-K-Q > A-2-3 > K-Q-J > … > 4-3-2
+ *   - 'a23-lowest':           A-K-Q > K-Q-J > … > 4-3-2 > A-2-3
+ */
+const SEQUENCE_ORDERS = ['a23-second', 'a23-lowest'];
+
+const DEFAULT_RULES = Object.freeze({
+  sequenceOrder: 'a23-second'
+});
+
+/**
+ * Comparable ordering value for a run, under the configured house rule.
+ * The scale is only used inside the sequence categories, so the exact
+ * numbers don't matter — only their order does.
+ */
+function runOrderValue(run, sequenceOrder = DEFAULT_RULES.sequenceOrder) {
+  if (!run) return 0;
+  if (sequenceOrder === 'a23-lowest') return run;      // natural: A-2-3 (3) is lowest
+  if (run === 14) return 15;                           // A-K-Q stays on top
+  if (run === 3) return 14;                            // A-2-3 slots in second
+  return run;                                          // K-Q-J (13) … 4-3-2 (4)
+}
+
+/**
  * Evaluate three cards.
+ * @param {string[]} cards - exactly three card ids, e.g. ['AS', 'KH', '10D'].
+ * @param {{sequenceOrder?: string}} [rules] - house rules (see DEFAULT_RULES).
  * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
  *            key: number[], name: string, label: string, high: number}}
  */
-function evaluate(cards) {
+function evaluate(cards, rules = DEFAULT_RULES) {
   if (!Array.isArray(cards) || cards.length !== 3) {
     throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
   }
+  const sequenceOrder = rules?.sequenceOrder || DEFAULT_RULES.sequenceOrder;
   const parsed = cards.map(parseCard);
   const ranks = descRanks(cards);
   const suits = parsed.map((card) => card.suit);
@@ -1707,8 +1792,8 @@ function evaluate(cards) {
       break;
     case CATEGORY.PURE_SEQUENCE:
     case CATEGORY.SEQUENCE:
-      // Compare runs by their high card (ace-low runs lose to every other run).
-      tiebreak = [run];
+      // Compare runs by their house-rule order (see runOrderValue).
+      tiebreak = [runOrderValue(run, sequenceOrder)];
       break;
     case CATEGORY.COLOR:
     case CATEGORY.HIGH_CARD:
@@ -1743,15 +1828,15 @@ function rankText(rank) {
 }
 
 function describe(evaluation) {
-  const { category, ranks, suits, tiebreak } = evaluation;
+  const { category, ranks, suits, tiebreak, run } = evaluation;
   const suit = SUIT_LABEL[suits[0]];
   switch (category) {
     case CATEGORY.TRAIL:
       return `Trail of ${rankText(tiebreak[0])}s`;
     case CATEGORY.PURE_SEQUENCE:
-      return `Pure Sequence ${runText(tiebreak[0])} of ${SUIT_NAME[suits[0]]}`;
+      return `Pure Sequence ${runText(run)} of ${SUIT_NAME[suits[0]]}`;
     case CATEGORY.SEQUENCE:
-      return `Sequence ${runText(tiebreak[0])}`;
+      return `Sequence ${runText(run)}`;
     case CATEGORY.COLOR:
       return `Colour ${suits.map((s) => SUIT_LABEL[s]).join('')} high ${rankText(ranks[0])}`;
     case CATEGORY.PAIR:
@@ -1810,9 +1895,10 @@ function handStrength(evaluation) {
     case CATEGORY.TRAIL:
       return 0.94 + 0.06 * kicker(evaluation, 0);
     case CATEGORY.PURE_SEQUENCE:
-      return 0.86 + 0.06 * ((top - 3) / 11);
+      // tiebreak[0] is a runOrderValue: 4 (lowest run) … 15 (A-K-Q).
+      return 0.86 + 0.06 * ((top - 4) / 11);
     case CATEGORY.SEQUENCE:
-      return 0.72 + 0.10 * ((top - 3) / 11);
+      return 0.72 + 0.10 * ((top - 4) / 11);
     case CATEGORY.COLOR: {
       const high = (evaluation.tiebreak[0] - 2) / 12;
       const mid = (evaluation.tiebreak[1] - 2) / 12;
@@ -1837,6 +1923,9 @@ __exports.CATEGORY_NAME = CATEGORY_NAME;
 __exports.CATEGORY_LABEL = CATEGORY_LABEL;
 __exports.RANKING_CHART = RANKING_CHART;
 __exports.sequenceHigh = sequenceHigh;
+__exports.SEQUENCE_ORDERS = SEQUENCE_ORDERS;
+__exports.DEFAULT_RULES = DEFAULT_RULES;
+__exports.runOrderValue = runOrderValue;
 __exports.evaluate = evaluate;
 __exports.describe = describe;
 __exports.compareKeys = compareKeys;
@@ -1854,11 +1943,23 @@ __define("src/engine/table.js", function (__exports, __require) {
  *
  * Rules implemented (standard / "open" Teen Patti):
  *   • 52 card deck, 3 cards per player, 2–6 players per table.
- *   • Every player posts a Boot (ante) to be dealt in.
- *   • Play is either Blind (cards unseen, bets at half rate) or Seen.
- *     The amount a *seen* player pays is the "stake"; a blind player pays
- *     ceil(stake / 2). "Blind raise" must at least double the stake.
+ *   • Every player posts a Boot (ante) to be dealt in. The current stake
+ *     starts at the boot.
+ *   • Play is either Blind (cards unseen) or Seen.
+ *     `stake` is the BLIND unit: a blind player bets 1x–2x the current stake
+ *     (after a blind bet of X the stake becomes X); a seen player bets 2x–4x
+ *     the current stake (after a seen bet of X the stake becomes X/2).
+ *     The engine expresses every bet as the stake it sets: a raise "to S"
+ *     costs a blind player S and a seen player 2·S, with S capped at
+ *     `chaalLimit`× the current stake (the max-bet-per-turn house rule).
  *   • On your turn: Pack (fold), Chaal/Call, Raise, All-in, Show, Side Show.
+ *     A side show costs the requester their normal chaal and consumes the
+ *     turn; the target accepts or declines. Ties pack the requester.
+ *   • `potLimit` (optional): when the pot reaches it, everybody still live is
+ *     forced to show and ties split the pot. In a *requested* show, ties go
+ *     against the caller (`showTie: 'caller-loses'`, configurable).
+ *   • `maxBlindRounds` (optional): after that many rounds, blind players are
+ *     automatically seen at the start of their turn.
  *   • Everyone at the table gets the chance to respond to a raise; a betting
  *     round ends when all live players have responded. After `maxRounds`
  *     rounds a compulsory Showdown happens (house rule that guarantees the
@@ -1872,8 +1973,8 @@ __define("src/engine/table.js", function (__exports, __require) {
  * which hosts drain and broadcast — they drive the animations and sounds.
  */
 
-const { makeDeck, shuffle, createRng } = __require("src/engine/cards.js");
-const { evaluate, compareKeys, CATEGORY_NAME, RANKING_CHART, handStrength } = __require("src/engine/evaluator.js");
+const { makeDeck, shuffle, createRng, secureRandom } = __require("src/engine/cards.js");
+const { evaluate, compareKeys, CATEGORY_NAME, RANKING_CHART, handStrength, DEFAULT_RULES } = __require("src/engine/evaluator.js");
 
 const PHASE = {
   WAITING: 'waiting',
@@ -1913,10 +2014,23 @@ const DEFAULT_CONFIG = {
   sideshow: true,
   /** Time source: () => ms. Hosts may inject their own (tests, replay). */
   clock: null,
-  /** Minimum raise over the current stake. */
-  minRaise: 2,
+  /** Minimum raise step over the current stake (in blind units). */
+  minRaise: 1,
   /** House cap on the stake (0 = uncapped, chips are the only limit). */
   maxStake: 0,
+  /**
+   * Max-bet-per-turn multiple: a raise may set the stake to at most
+   * `chaalLimit`× the current stake (blind 1x–2x, seen 2x–4x when 2).
+   */
+  chaalLimit: 2,
+  /** Pot cap: when the pot reaches this, everyone left is forced to show (0 = off). */
+  potLimit: 0,
+  /** After this many betting rounds blind players are auto-seen (0 = never). */
+  maxBlindRounds: 0,
+  /** Requested-show ties: 'caller-loses' (the asker loses ties) or 'split'. */
+  showTie: 'caller-loses',
+  /** House rule for where the A-2-3 run ranks: 'a23-second' | 'a23-lowest'. */
+  sequenceOrder: DEFAULT_RULES.sequenceOrder,
   /** What happens when the clock runs out. */
   timeoutAction: 'pack',
   /** Cost of calling a show: 'call' (the usual chaal amount) or 'double'. */
@@ -1940,9 +2054,12 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-/** What a raise to `stake` costs a player: blind players pay half the stake. */
+/**
+ * What a bet that sets the stake to `stake` costs: a blind player pays the
+ * stake itself, a seen player pays double (chaal rate).
+ */
 function raiseCostFor(stake, seen) {
-  return seen ? Math.floor(stake) : Math.ceil(stake / 2);
+  return seen ? Math.floor(stake) * 2 : Math.floor(stake);
 }
 
 class TeenPattiTable {
@@ -1976,7 +2093,14 @@ class TeenPattiTable {
     this.turnDeadline = 0;
     this.sideShowDeadline = 0;
     this.sessionStats = new Map();
-    this.rng = this.config.rng || createRng(this.config.seed || this.now());
+    /**
+     * Deal randomness: the CSPRNG for real play, a seeded xorshift only when
+     * the host explicitly asks for reproducible deals (tests, replays).
+     */
+    this.rng = this.config.rng
+      || (this.config.seed != null ? createRng(this.config.seed) : secureRandom);
+    /** House rules forwarded to the hand evaluator. */
+    this.rules = { sequenceOrder: this.config.sequenceOrder };
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
@@ -2087,12 +2211,18 @@ class TeenPattiTable {
     return this.players.reduce((total, player) => total + player.committed, 0);
   }
 
+  /** What a blind player pays to call: 1x the current stake. */
   get blindCost() {
-    return Math.ceil(this.stake / 2);
+    return this.stake;
+  }
+
+  /** What a seen player pays to call (chaal): 2x the current stake. */
+  get chaalCost() {
+    return this.stake * 2;
   }
 
   callCost(player) {
-    return player.seen ? this.stake : this.blindCost;
+    return player.seen ? this.chaalCost : this.blindCost;
   }
 
   get activePlayers() {
@@ -2219,6 +2349,16 @@ class TeenPattiTable {
   startTurnClock() {
     this.turnStartedAt = this.now();
     const player = this.turnPlayer;
+    // Blind-round limit: past it, a blind player is automatically seen at the
+    // start of their turn (they keep the turn — just at chaal rates now).
+    if (
+      this.config.maxBlindRounds > 0
+      && this.round > this.config.maxBlindRounds
+      && player && player.inHand && !player.packed && !player.seen
+    ) {
+      this.pushLog(`${player.name} reached the ${this.config.maxBlindRounds} blind round limit — cards turned over`);
+      this.see(player.id);
+    }
     // A player who lost their connection gets a much shorter clock: their seat
     // still plays out the hand, but nobody waits around for them.
     const offline = player && player.connected === false;
@@ -2363,15 +2503,21 @@ class TeenPattiTable {
 
   /** Minimum stake a raise may be set to, given who is raising. */
   minRaiseFor(player) {
-    const step = Math.max(this.config.minRaise, Math.ceil(this.config.boot / 2));
-    let min = this.stake + step;
-    if (!player.seen) min = Math.max(min, this.stake * 2);
-    return min;
+    return this.stake + Math.max(1, this.config.minRaise);
   }
 
+  /**
+   * Highest stake a raise may set. Three caps apply:
+   *   • the chaal limit — at most `chaalLimit`× the current stake per turn
+   *     (blind bets 1x–2x, seen bets 2x–4x when chaalLimit is 2);
+   *   • what the player can actually pay (seen players pay 2× the stake);
+   *   • the table's optional hard stake cap (`maxStake`).
+   */
   maxRaiseFor(player) {
-    const affordable = player.seen ? player.chips : player.chips * 2;
-    const cap = this.config.maxStake > 0 ? Math.min(affordable, this.config.maxStake) : affordable;
+    const turnCap = Math.floor(this.stake * Math.max(1, this.config.chaalLimit));
+    const affordable = player.seen ? Math.floor(player.chips / 2) : player.chips;
+    let cap = Math.min(turnCap, affordable);
+    if (this.config.maxStake > 0) cap = Math.min(cap, this.config.maxStake);
     return Math.max(0, cap);
   }
 
@@ -2407,9 +2553,13 @@ class TeenPattiTable {
   handleAllIn(player, payload = {}) {
     const amount = player.chips;
     if (amount <= 0) throw new Error('Nothing left to bet');
+    const stakeBefore = this.stake;
     const paid = this.pay(player, amount);
-    // A blind all-in of X is worth a seen stake of 2X (blind bets at half rate).
-    const equivalentStake = player.seen ? paid : paid * 2;
+    // A seen bet of X is worth a blind stake of X/2. The all-in can bump the
+    // stake, but never beyond the per-turn chaal limit.
+    const equivalent = player.seen ? Math.floor(paid / 2) : paid;
+    const turnCap = Math.floor(stakeBefore * Math.max(1, this.config.chaalLimit));
+    const equivalentStake = Math.min(equivalent, turnCap);
     const raised = equivalentStake > this.stake;
     if (raised) this.stake = equivalentStake;
     player.lastAction = ACTION.ALL_IN;
@@ -2453,16 +2603,18 @@ class TeenPattiTable {
       pot: this.potTotal
     });
     this.pushLog(`${player.name} called a show (paid ${paid})`);
-    this.showdown('show');
+    this.showdown('show', { callerId: player.id });
   }
 
   canSideShow(player) {
     if (!this.config.sideshow) return false;
     if (!player.seen || player.allIn) return false;
+    if (player.chips < this.chaalCost) return false; // the request costs a chaal
     if (this.activePlayers.length < 3) return false;
     const target = this.playerAt(this.previousActiveSeat(player.seat));
     if (!target || target.id === player.id) return false;
-    return target.inHand && !target.packed && !target.allIn;
+    // Spec: only against another *seen* player who is still live.
+    return target.inHand && !target.packed && !target.allIn && target.seen;
   }
 
   handleSideShowRequest(player, payload = {}) {
@@ -2474,19 +2626,25 @@ class TeenPattiTable {
     if (!target) throw new Error('No player to compare with');
     if (target.id === player.id) throw new Error('No player to compare with');
     if (target.allIn) throw new Error(`${target.name} is all-in — no side show possible`);
+    if (!target.seen) throw new Error(`${target.name} is playing blind — you can only compare with a seen player`);
+    const cost = this.chaalCost;
+    if (player.chips < cost) throw new Error(`A side show costs your chaal (${cost}) — not enough chips`);
+    // The request costs the normal chaal and consumes the turn: whatever the
+    // outcome, the requester has acted this round.
+    const paid = this.pay(player, cost);
     player.lastAction = ACTION.SIDE_SHOW;
+    this.pending.delete(player.id);
     this.sideShow = {
       requesterId: player.id,
       requesterSeat: player.seat,
       targetId: target.id,
       targetSeat: target.seat,
+      amount: paid,
       deadline: this.now() + this.config.sideShowSeconds * 1000
     };
     this.sideShowDeadline = this.sideShow.deadline;
-    this.pushEvent({ type: 'sideshow:request', ...this.sideShow });
-    this.pushLog(`${player.name} asked ${target.name} for a side show`);
-    // The requester keeps their turn: after the comparison resolves they must
-    // still make a betting decision.
+    this.pushEvent({ type: 'sideshow:request', ...this.sideShow, pot: this.potTotal });
+    this.pushLog(`${player.name} paid ${paid} and asked ${target.name} for a side show`);
     return this.sideShow;
   }
 
@@ -2502,15 +2660,14 @@ class TeenPattiTable {
     if (!accept) {
       this.pushEvent({ type: 'sideshow:declined', ...request });
       this.pushLog(`${target.name} declined the side show`);
-      if (this.turnSeat === requester.seat) this.startTurnClock();
+      // The requester already paid their chaal — the turn moves on.
+      if (this.phase === PHASE.BETTING) this.advanceTurn();
       return null;
     }
 
-    // A blind player who is asked to compare must look at their cards first.
-    if (!target.seen) this.see(target.id);
-
-    const requesterHand = evaluate(requester.cards);
-    const targetHand = evaluate(target.cards);
+    const requesterHand = evaluate(requester.cards, this.rules);
+    const targetHand = evaluate(target.cards, this.rules);
+    // Ties pack the requester: winner only when strictly higher.
     const winner = compareKeys(requesterHand.key, targetHand.key) > 0 ? requester : target;
     const loser = winner === requester ? target : requester;
     loser.packed = true;
@@ -2527,8 +2684,8 @@ class TeenPattiTable {
       targetCards: target.cards.slice()
     });
     this.pushLog(`${winner.name} won the side show — ${loser.name} packed`);
-    if (this.turnSeat === requester.seat && requester.packed) this.advanceTurn();
-    else if (this.phase === PHASE.BETTING) this.maybeShowdown();
+    // The requester's chaal was their action, so the turn always moves on.
+    if (this.phase === PHASE.BETTING) this.advanceTurn();
     return { winnerId: winner.id, loserId: loser.id };
   }
 
@@ -2540,6 +2697,12 @@ class TeenPattiTable {
 
     // No more betting possible: everybody else is all-in.
     if (this.actionablePlayers.length <= 1) return this.showdown('allin');
+
+    // Pot limit reached: everyone still live is forced to show.
+    if (this.config.potLimit > 0 && this.potTotal >= this.config.potLimit) {
+      this.pushLog(`Pot limit of ${this.config.potLimit} reached — everyone shows`);
+      return this.showdown('potlimit');
+    }
 
     const currentSeat = this.turnSeat;
     this.pending = new Set([...this.pending].filter((id) => {
@@ -2576,6 +2739,10 @@ class TeenPattiTable {
     if (this.phase !== PHASE.BETTING) return;
     if (this.activePlayers.length <= 1) return this.showdown('fold');
     if (this.actionablePlayers.length <= 1) return this.showdown('allin');
+    if (this.config.potLimit > 0 && this.potTotal >= this.config.potLimit) {
+      this.pushLog(`Pot limit of ${this.config.potLimit} reached — everyone shows`);
+      return this.showdown('potlimit');
+    }
   }
 
   /** Timer hook — the host owns the clock. */
@@ -2606,17 +2773,25 @@ class TeenPattiTable {
 
   /**
    * Resolve the hand.
-   * @param {'fold'|'show'|'rounds'|'allin'} reason
+   * @param {'fold'|'show'|'rounds'|'allin'|'potlimit'} reason
+   * @param {{callerId?: string}} [opts] - who asked, for a requested show.
    */
-  showdown(reason) {
+  showdown(reason, opts = {}) {
     if (this.phase !== PHASE.BETTING) return;
     this.phase = PHASE.SHOWDOWN;
     this.turnSeat = -1;
     this.turnDeadline = 0;
     const live = this.activePlayers;
+    /**
+     * Tie policy: in a *requested* show the caller loses ties (configurable);
+     * forced shows (pot limit / round limit / all-in) split the pot.
+     */
+    const showCallerId = reason === 'show' && this.config.showTie === 'caller-loses'
+      ? opts.callerId || null
+      : null;
 
     const evaluations = new Map();
-    for (const player of live) evaluations.set(player.id, evaluate(player.cards));
+    for (const player of live) evaluations.set(player.id, evaluate(player.cards, this.rules));
 
     const contributions = new Map();
     for (const player of this.players) if (player.committed > 0) contributions.set(player.id, player.committed);
@@ -2649,7 +2824,12 @@ class TeenPattiTable {
         for (const player of eligible.slice(1)) {
           if (compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) > 0) best = player;
         }
-        const tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        let tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        // Requested-show tie: the player who asked for the show loses it.
+        if (showCallerId && tied.length > 1 && tied.some((player) => player.id === showCallerId)) {
+          const withoutCaller = tied.filter((player) => player.id !== showCallerId);
+          if (withoutCaller.length > 0) tied = withoutCaller;
+        }
         const share = Math.floor(layerPot / tied.length);
         let remainder = layerPot - share * tied.length;
         for (const player of tied) {
@@ -2778,7 +2958,7 @@ class TeenPattiTable {
   /** Ranked strength of the viewer's own hand (used for the "your hand" widget). */
   handInfo(cards) {
     if (!cards || cards.length !== 3) return null;
-    const evaluation = evaluate(cards);
+    const evaluation = evaluate(cards, this.rules);
     return {
       category: evaluation.category,
       name: evaluation.name,
@@ -2870,10 +3050,13 @@ class TeenPattiTable {
           raise: isTurn && maxRaise >= minRaise,
           minRaise,
           maxRaise,
+          /** Chips paid per point of stake raised to: seen pays double. */
+          raiseRate: viewer.seen ? 2 : 1,
           allIn: isTurn && viewer.chips > 0,
           allInAmount: viewer.chips,
           show: isTurn && this.canShow(viewer),
           sideShow: isTurn && this.canSideShow(viewer),
+          sideShowCost: this.chaalCost,
           see: !viewer.seen && viewer.inHand && !viewer.packed,
           rebuy: viewer.chips < this.config.boot
         }
@@ -2890,6 +3073,7 @@ class TeenPattiTable {
       pot: this.potTotal,
       stake: this.stake,
       blindCost: this.blindCost,
+      chaalCost: this.chaalCost,
       dealerSeat: this.dealerSeat,
       turnSeat: this.turnSeat,
       turnDeadline: this.turnDeadline,
@@ -2901,6 +3085,11 @@ class TeenPattiTable {
         turnSeconds: this.config.turnSeconds,
         minRaise: this.config.minRaise,
         maxStake: this.config.maxStake,
+        chaalLimit: this.config.chaalLimit,
+        potLimit: this.config.potLimit,
+        maxBlindRounds: this.config.maxBlindRounds,
+        showTie: this.config.showTie,
+        sequenceOrder: this.config.sequenceOrder,
         sideshow: this.config.sideshow,
         startChips: this.config.startChips,
         minBuyIn: this.config.minBuyIn,
@@ -3008,9 +3197,9 @@ function randomPersonality(rng = Math.random) {
  * hold the best hand. Cheap enough (a few hundred 3-card evaluations) to run on
  * every decision.
  */
-function estimateWinRate(cards, opponents, rng = Math.random, trials = 36) {
+function estimateWinRate(cards, opponents, rng = Math.random, trials = 36, rules = undefined) {
   if (opponents <= 0) return 1;
-  const mine = evaluate(cards);
+  const mine = evaluate(cards, rules);
   const deck = makeDeck().filter((card) => !cards.includes(card));
   let wins = 0;
   for (let trial = 0; trial < trials; trial += 1) {
@@ -3018,7 +3207,7 @@ function estimateWinRate(cards, opponents, rng = Math.random, trials = 36) {
     let best = true;
     for (let i = 0; i < opponents && best; i += 1) {
       const hand = [shuffled[i * 3], shuffled[i * 3 + 1], shuffled[i * 3 + 2]];
-      if (compareKeys(evaluate(hand).key, mine.key) >= 0) best = false;
+      if (compareKeys(evaluate(hand, rules).key, mine.key) >= 0) best = false;
     }
     if (best) wins += 1;
   }
@@ -3058,8 +3247,8 @@ function decideAction(view) {
   }
 
   // ── Seen decisions ───────────────────────────────────────────────────────
-  const equity = view.equity ?? estimateWinRate(view.cards, Math.max(1, activePlayers - 1), rng);
-  const strength = handStrength(evaluate(view.cards));
+  const equity = view.equity ?? estimateWinRate(view.cards, Math.max(1, activePlayers - 1), rng, 36, view.rules);
+  const strength = handStrength(evaluate(view.cards, view.rules));
   const score = Math.min(1, Math.max(0, equity * 0.62 + strength * 0.38 + noise()));
   const potOdds = costToCall / Math.max(1, pot + costToCall);
   const pressure = costToCall / Math.max(1, chips);
@@ -4167,7 +4356,7 @@ class PracticeController {
       boot,
       startChips: Math.max(1000, boot * 100),
       maxBuyIn: Math.max(1000, boot * 100),
-      minRaise: Math.max(2, Math.ceil(boot / 2)),
+      minRaise: 1,
       maxRounds: Number(this.settings.practiceRounds) || 4,
       turnSeconds: turnSeconds > 0 ? turnSeconds : 9999,
       sideshow: true,
@@ -4324,7 +4513,7 @@ class PracticeController {
           } else if (now >= this.nextBotAt) {
             this.sideShowFor = null;
             const profile = PERSONALITIES[target.personality] || PERSONALITIES.balanced;
-            const strength = target.seen ? handStrength(evaluate(target.cards)) : 0.5;
+            const strength = target.seen ? handStrength(evaluate(target.cards, table.rules)) : 0.5;
             table.respondSideShow(target.id, strength > 0.62 - profile.aggression * 0.3);
             this.publish();
           }
@@ -4385,6 +4574,7 @@ class PracticeController {
       canShow: table.canShow(player),
       canSideShow: table.canSideShow(player),
       personality: player.personality,
+      rules: table.rules,
       rng: Math.random
     };
 
@@ -4881,7 +5071,7 @@ class GameView {
     } else if (you.inHand && !you.seen) {
       this.els.myHandName.textContent = 'Playing blind 👁';
       this.els.myHandName.style.color = 'var(--blue)';
-      this.els.myHandNote.textContent = `Blind bets cost half (${formatChips(snapshot.blindCost)}) — see your cards any time`;
+      this.els.myHandNote.textContent = `Blind bets cost half a chaal (${formatChips(snapshot.blindCost)}) — see your cards any time`;
     } else {
       this.els.myHandName.textContent = seatsView?.packed ? 'You packed this hand' : 'No cards';
       this.els.myHandNote.textContent = '';
@@ -5060,9 +5250,9 @@ class GameView {
     if (options.sideShow) {
       nodes.push(el('button', {
         class: 'btn action',
-        title: 'Compare with the player on your right — the weaker hand packs',
+        title: 'Pay your chaal to compare with the player on your right — the weaker hand packs, ties pack you',
         onclick: () => this.act(ACTION.SIDE_SHOW)
-      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: 'compare' })]));
+      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: formatChips(options.sideShowCost || 0) })]));
     }
 
     bar.replaceChildren(...nodes);
@@ -5108,9 +5298,9 @@ class GameView {
       el('h4', { style: { marginTop: '6px' }, text: 'Table rules in play' }),
       el('ul', { class: 'rule-list' }, [
         el('li', { html: '<b>Boot</b> — everyone posts the ante to be dealt three cards.' }),
-        el('li', { html: '<b>Blind vs Seen</b> — blind players bet half the stake; looking at your cards switches you to full chaal.' }),
-        el('li', { html: '<b>Chaal</b> — match the current stake to stay in. A raise must beat the last stake.' }),
-        el('li', { html: '<b>Side show</b> — with 3+ live players, compare with your right-hand neighbour; the weaker hand packs.' }),
+        el('li', { html: '<b>Blind vs Seen</b> — a blind player bets 1x–2x the current stake; once you look at your cards you pay chaal rate, 2x–4x the stake.' }),
+        el('li', { html: '<b>Chaal</b> — match to stay in. A raise lifts the stake, at most double per turn.' }),
+        el('li', { html: '<b>Side show</b> — with 3+ live players, pay your chaal to compare with the seen player on your right; the weaker hand packs, ties pack the asker.' }),
         el('li', { html: '<b>Show</b> — heads-up, pay the show cost and compare immediately.' }),
         el('li', { html: '<b>Compulsory show</b> — after the configured number of rounds everybody still in reveals and the best hand wins.' })
       ]),
@@ -5305,6 +5495,33 @@ class GameView {
       }, 4200);
     }
     this.showShowdownCards();
+    this.showHandSplash(event);
+  }
+
+  /**
+   * Showdown drama: a big "TRAIL!"-style splash for the winning hand,
+   * timed to land just after the staggered card reveal finishes.
+   * Only for real showdowns — a fold win reveals nothing to celebrate.
+   */
+  showHandSplash(event) {
+    if (event.reason === 'fold') return;
+    const snapshot = this.snapshot;
+    const best = snapshot?.results?.rankings?.[0];
+    if (!best?.hand?.name) return;
+    const revealDone = 3 * 260 + 320; // three flips + a beat
+    // Pair and better gets the splash; a High Card win stays understated.
+    const worthy = best.hand.category >= 1;
+    if (!worthy) return;
+    this.later(() => {
+      if (this.destroyed) return;
+      const splash = el('div', {
+        class: `hand-splash ${best.hand.category >= 4 ? 'epic' : ''}`,
+        text: `${best.hand.name.toUpperCase()}!`
+      });
+      this.els.winnerHost.appendChild(splash);
+      if (best.hand.category >= 4) this.sparkle(18); // pure sequence & trail rain sparks
+      this.later(() => splash.remove(), 2400);
+    }, revealDone);
   }
 
   /** At showdown the centre of the felt shows the best hand face up. */
@@ -5314,9 +5531,19 @@ class GameView {
     const best = snapshot.results.rankings[0];
     if (!best) return;
     const cards = snapshot.results.reveal.find((entry) => entry.id === best.id)?.cards || [];
+    const isRealShowdown = snapshot.results.reason !== 'fold';
     this.els.dealArea.replaceChildren(el('div', { class: 'card-panel', style: { padding: '10px 14px', textAlign: 'center' } }, [
       el('div', { class: 'tiny muted', text: best.name }),
-      el('div', { class: 'row', style: { gap: '6px', justifyContent: 'center', margin: '6px 0' } }, cards.map((card) => cardEl(card, { size: 'md' }))),
+      el('div', { class: 'row', style: { gap: '6px', justifyContent: 'center', margin: '6px 0' } },
+        cards.map((card, index) => {
+          const node = cardEl(card, { size: 'md' });
+          // Slow, staggered reveal + gold glow on the winning cards.
+          if (isRealShowdown) {
+            node.classList.add('card-reveal', 'winning-card');
+            node.style.animationDelay = `${index * 260}ms`;
+          }
+          return node;
+        })),
       el('div', { style: { fontWeight: '700', color: 'var(--gold)' }, text: `${best.hand.text} · ${formatChips(best.committed)} in` })
     ]));
   }
@@ -5714,7 +5941,7 @@ class App {
     const items = [
       ['♠', 'Trail beats everything'],
       ['♥', `Boot from <b>${boots[0] ?? 10}</b> chips`],
-      ['♣', 'Play blind at half price'],
+      ['♣', 'Play blind at half the chaal price'],
       ['♦', 'Side show the player on your right'],
       ['♠', `Biggest pot on the floor <b>${formatChips(this.store.stats.biggestPot)}</b>`],
       ['♥', 'House tables run 24/7 with AI regulars'],
@@ -6537,11 +6764,11 @@ class App {
     const steps = [
       {
         title: '1 · Post the boot and get three cards',
-        text: 'Everyone pays the boot (ante) to be dealt three cards. Play is either blind or seen — blind bets cost half, so blind play is cheaper but you are betting in the dark.'
+        text: 'Everyone pays the boot (ante) to be dealt three cards. Play is either blind or seen — a blind bet is 1x the stake while a seen chaal is 2x, so blind play is cheaper but you are betting in the dark.'
       },
       {
         title: '2 · See your cards when you are ready',
-        text: 'Press S or the 👁 button to look. You keep the same turn and may then chaal (call the stake) at full rate, raise, or pack. Raising blind must at least double the stake.'
+        text: 'Press S or the 👁 button to look. You keep the same turn and may then chaal (2x the stake), raise, or pack. Any raise can lift the stake to at most double per turn.'
       },
       {
         title: '3 · Pack, chaal or raise on your turn',

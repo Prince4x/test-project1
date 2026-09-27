@@ -69,11 +69,13 @@ function descRanks(cards) {
 }
 
 /**
- * Sequence detection. Returns the rank value used for comparisons:
+ * Sequence detection. Returns the *natural* high card of the run:
  *   - A-K-Q  -> 14 (highest run)
- *   - A-2-3  -> 3  (lowest run, the ace plays low)
+ *   - A-2-3  -> 3  (the ace plays low)
  *   - otherwise -> the highest card of the run
  * Returns 0 when the cards are not consecutive.
+ *
+ * Where A-2-3 *ranks* among the runs is a house rule — see runOrderValue().
  */
 export function sequenceHigh(ranks) {
   const [a, b, c] = ranks;
@@ -84,14 +86,42 @@ export function sequenceHigh(ranks) {
 }
 
 /**
+ * House-rule options for where the A-2-3 run ranks. Configurable because
+ * home games disagree; both orders exist in the wild.
+ *   - 'a23-second' (default): A-K-Q > A-2-3 > K-Q-J > … > 4-3-2
+ *   - 'a23-lowest':           A-K-Q > K-Q-J > … > 4-3-2 > A-2-3
+ */
+export const SEQUENCE_ORDERS = ['a23-second', 'a23-lowest'];
+
+export const DEFAULT_RULES = Object.freeze({
+  sequenceOrder: 'a23-second'
+});
+
+/**
+ * Comparable ordering value for a run, under the configured house rule.
+ * The scale is only used inside the sequence categories, so the exact
+ * numbers don't matter — only their order does.
+ */
+export function runOrderValue(run, sequenceOrder = DEFAULT_RULES.sequenceOrder) {
+  if (!run) return 0;
+  if (sequenceOrder === 'a23-lowest') return run;      // natural: A-2-3 (3) is lowest
+  if (run === 14) return 15;                           // A-K-Q stays on top
+  if (run === 3) return 14;                            // A-2-3 slots in second
+  return run;                                          // K-Q-J (13) … 4-3-2 (4)
+}
+
+/**
  * Evaluate three cards.
+ * @param {string[]} cards - exactly three card ids, e.g. ['AS', 'KH', '10D'].
+ * @param {{sequenceOrder?: string}} [rules] - house rules (see DEFAULT_RULES).
  * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
  *            key: number[], name: string, label: string, high: number}}
  */
-export function evaluate(cards) {
+export function evaluate(cards, rules = DEFAULT_RULES) {
   if (!Array.isArray(cards) || cards.length !== 3) {
     throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
   }
+  const sequenceOrder = rules?.sequenceOrder || DEFAULT_RULES.sequenceOrder;
   const parsed = cards.map(parseCard);
   const ranks = descRanks(cards);
   const suits = parsed.map((card) => card.suit);
@@ -120,8 +150,8 @@ export function evaluate(cards) {
       break;
     case CATEGORY.PURE_SEQUENCE:
     case CATEGORY.SEQUENCE:
-      // Compare runs by their high card (ace-low runs lose to every other run).
-      tiebreak = [run];
+      // Compare runs by their house-rule order (see runOrderValue).
+      tiebreak = [runOrderValue(run, sequenceOrder)];
       break;
     case CATEGORY.COLOR:
     case CATEGORY.HIGH_CARD:
@@ -156,15 +186,15 @@ function rankText(rank) {
 }
 
 export function describe(evaluation) {
-  const { category, ranks, suits, tiebreak } = evaluation;
+  const { category, ranks, suits, tiebreak, run } = evaluation;
   const suit = SUIT_LABEL[suits[0]];
   switch (category) {
     case CATEGORY.TRAIL:
       return `Trail of ${rankText(tiebreak[0])}s`;
     case CATEGORY.PURE_SEQUENCE:
-      return `Pure Sequence ${runText(tiebreak[0])} of ${SUIT_NAME[suits[0]]}`;
+      return `Pure Sequence ${runText(run)} of ${SUIT_NAME[suits[0]]}`;
     case CATEGORY.SEQUENCE:
-      return `Sequence ${runText(tiebreak[0])}`;
+      return `Sequence ${runText(run)}`;
     case CATEGORY.COLOR:
       return `Colour ${suits.map((s) => SUIT_LABEL[s]).join('')} high ${rankText(ranks[0])}`;
     case CATEGORY.PAIR:
@@ -223,9 +253,10 @@ export function handStrength(evaluation) {
     case CATEGORY.TRAIL:
       return 0.94 + 0.06 * kicker(evaluation, 0);
     case CATEGORY.PURE_SEQUENCE:
-      return 0.86 + 0.06 * ((top - 3) / 11);
+      // tiebreak[0] is a runOrderValue: 4 (lowest run) … 15 (A-K-Q).
+      return 0.86 + 0.06 * ((top - 4) / 11);
     case CATEGORY.SEQUENCE:
-      return 0.72 + 0.10 * ((top - 3) / 11);
+      return 0.72 + 0.10 * ((top - 4) / 11);
     case CATEGORY.COLOR: {
       const high = (evaluation.tiebreak[0] - 2) / 12;
       const mid = (evaluation.tiebreak[1] - 2) / 12;

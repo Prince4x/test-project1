@@ -217,7 +217,7 @@ class App {
     const items = [
       ['♠', 'Trail beats everything'],
       ['♥', `Boot from <b>${boots[0] ?? 10}</b> chips`],
-      ['♣', 'Play blind at half price'],
+      ['♣', 'Play blind at half the chaal price'],
       ['♦', 'Side show the player on your right'],
       ['♠', `Biggest pot on the floor <b>${formatChips(this.store.stats.biggestPot)}</b>`],
       ['♥', 'House tables run 24/7 with AI regulars'],
@@ -1040,11 +1040,11 @@ class App {
     const steps = [
       {
         title: '1 · Post the boot and get three cards',
-        text: 'Everyone pays the boot (ante) to be dealt three cards. Play is either blind or seen — blind bets cost half, so blind play is cheaper but you are betting in the dark.'
+        text: 'Everyone pays the boot (ante) to be dealt three cards. Play is either blind or seen — a blind bet is 1x the stake while a seen chaal is 2x, so blind play is cheaper but you are betting in the dark.'
       },
       {
         title: '2 · See your cards when you are ready',
-        text: 'Press S or the 👁 button to look. You keep the same turn and may then chaal (call the stake) at full rate, raise, or pack. Raising blind must at least double the stake.'
+        text: 'Press S or the 👁 button to look. You keep the same turn and may then chaal (2x the stake), raise, or pack. Any raise can lift the stake to at most double per turn.'
       },
       {
         title: '3 · Pack, chaal or raise on your turn',

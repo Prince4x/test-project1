@@ -72,9 +72,9 @@ export function randomPersonality(rng = Math.random) {
  * hold the best hand. Cheap enough (a few hundred 3-card evaluations) to run on
  * every decision.
  */
-export function estimateWinRate(cards, opponents, rng = Math.random, trials = 36) {
+export function estimateWinRate(cards, opponents, rng = Math.random, trials = 36, rules = undefined) {
   if (opponents <= 0) return 1;
-  const mine = evaluate(cards);
+  const mine = evaluate(cards, rules);
   const deck = makeDeck().filter((card) => !cards.includes(card));
   let wins = 0;
   for (let trial = 0; trial < trials; trial += 1) {
@@ -82,7 +82,7 @@ export function estimateWinRate(cards, opponents, rng = Math.random, trials = 36
     let best = true;
     for (let i = 0; i < opponents && best; i += 1) {
       const hand = [shuffled[i * 3], shuffled[i * 3 + 1], shuffled[i * 3 + 2]];
-      if (compareKeys(evaluate(hand).key, mine.key) >= 0) best = false;
+      if (compareKeys(evaluate(hand, rules).key, mine.key) >= 0) best = false;
     }
     if (best) wins += 1;
   }
@@ -122,8 +122,8 @@ export function decideAction(view) {
   }
 
   // ── Seen decisions ───────────────────────────────────────────────────────
-  const equity = view.equity ?? estimateWinRate(view.cards, Math.max(1, activePlayers - 1), rng);
-  const strength = handStrength(evaluate(view.cards));
+  const equity = view.equity ?? estimateWinRate(view.cards, Math.max(1, activePlayers - 1), rng, 36, view.rules);
+  const strength = handStrength(evaluate(view.cards, view.rules));
   const score = Math.min(1, Math.max(0, equity * 0.62 + strength * 0.38 + noise()));
   const potOdds = costToCall / Math.max(1, pot + costToCall);
   const pressure = costToCall / Math.max(1, chips);

@@ -7,11 +7,23 @@
  *
  * Rules implemented (standard / "open" Teen Patti):
  *   • 52 card deck, 3 cards per player, 2–6 players per table.
- *   • Every player posts a Boot (ante) to be dealt in.
- *   • Play is either Blind (cards unseen, bets at half rate) or Seen.
- *     The amount a *seen* player pays is the "stake"; a blind player pays
- *     ceil(stake / 2). "Blind raise" must at least double the stake.
+ *   • Every player posts a Boot (ante) to be dealt in. The current stake
+ *     starts at the boot.
+ *   • Play is either Blind (cards unseen) or Seen.
+ *     `stake` is the BLIND unit: a blind player bets 1x–2x the current stake
+ *     (after a blind bet of X the stake becomes X); a seen player bets 2x–4x
+ *     the current stake (after a seen bet of X the stake becomes X/2).
+ *     The engine expresses every bet as the stake it sets: a raise "to S"
+ *     costs a blind player S and a seen player 2·S, with S capped at
+ *     `chaalLimit`× the current stake (the max-bet-per-turn house rule).
  *   • On your turn: Pack (fold), Chaal/Call, Raise, All-in, Show, Side Show.
+ *     A side show costs the requester their normal chaal and consumes the
+ *     turn; the target accepts or declines. Ties pack the requester.
+ *   • `potLimit` (optional): when the pot reaches it, everybody still live is
+ *     forced to show and ties split the pot. In a *requested* show, ties go
+ *     against the caller (`showTie: 'caller-loses'`, configurable).
+ *   • `maxBlindRounds` (optional): after that many rounds, blind players are
+ *     automatically seen at the start of their turn.
  *   • Everyone at the table gets the chance to respond to a raise; a betting
  *     round ends when all live players have responded. After `maxRounds`
  *     rounds a compulsory Showdown happens (house rule that guarantees the
@@ -25,13 +37,14 @@
  * which hosts drain and broadcast — they drive the animations and sounds.
  */
 
-import { makeDeck, shuffle, createRng } from './cards.js';
+import { makeDeck, shuffle, createRng, secureRandom } from './cards.js';
 import {
   evaluate,
   compareKeys,
   CATEGORY_NAME,
   RANKING_CHART,
-  handStrength
+  handStrength,
+  DEFAULT_RULES
 } from './evaluator.js';
 
 export const PHASE = {
@@ -72,10 +85,23 @@ export const DEFAULT_CONFIG = {
   sideshow: true,
   /** Time source: () => ms. Hosts may inject their own (tests, replay). */
   clock: null,
-  /** Minimum raise over the current stake. */
-  minRaise: 2,
+  /** Minimum raise step over the current stake (in blind units). */
+  minRaise: 1,
   /** House cap on the stake (0 = uncapped, chips are the only limit). */
   maxStake: 0,
+  /**
+   * Max-bet-per-turn multiple: a raise may set the stake to at most
+   * `chaalLimit`× the current stake (blind 1x–2x, seen 2x–4x when 2).
+   */
+  chaalLimit: 2,
+  /** Pot cap: when the pot reaches this, everyone left is forced to show (0 = off). */
+  potLimit: 0,
+  /** After this many betting rounds blind players are auto-seen (0 = never). */
+  maxBlindRounds: 0,
+  /** Requested-show ties: 'caller-loses' (the asker loses ties) or 'split'. */
+  showTie: 'caller-loses',
+  /** House rule for where the A-2-3 run ranks: 'a23-second' | 'a23-lowest'. */
+  sequenceOrder: DEFAULT_RULES.sequenceOrder,
   /** What happens when the clock runs out. */
   timeoutAction: 'pack',
   /** Cost of calling a show: 'call' (the usual chaal amount) or 'double'. */
@@ -99,9 +125,12 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-/** What a raise to `stake` costs a player: blind players pay half the stake. */
+/**
+ * What a bet that sets the stake to `stake` costs: a blind player pays the
+ * stake itself, a seen player pays double (chaal rate).
+ */
 export function raiseCostFor(stake, seen) {
-  return seen ? Math.floor(stake) : Math.ceil(stake / 2);
+  return seen ? Math.floor(stake) * 2 : Math.floor(stake);
 }
 
 export class TeenPattiTable {
@@ -135,7 +164,14 @@ export class TeenPattiTable {
     this.turnDeadline = 0;
     this.sideShowDeadline = 0;
     this.sessionStats = new Map();
-    this.rng = this.config.rng || createRng(this.config.seed || this.now());
+    /**
+     * Deal randomness: the CSPRNG for real play, a seeded xorshift only when
+     * the host explicitly asks for reproducible deals (tests, replays).
+     */
+    this.rng = this.config.rng
+      || (this.config.seed != null ? createRng(this.config.seed) : secureRandom);
+    /** House rules forwarded to the hand evaluator. */
+    this.rules = { sequenceOrder: this.config.sequenceOrder };
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
@@ -246,12 +282,18 @@ export class TeenPattiTable {
     return this.players.reduce((total, player) => total + player.committed, 0);
   }
 
+  /** What a blind player pays to call: 1x the current stake. */
   get blindCost() {
-    return Math.ceil(this.stake / 2);
+    return this.stake;
+  }
+
+  /** What a seen player pays to call (chaal): 2x the current stake. */
+  get chaalCost() {
+    return this.stake * 2;
   }
 
   callCost(player) {
-    return player.seen ? this.stake : this.blindCost;
+    return player.seen ? this.chaalCost : this.blindCost;
   }
 
   get activePlayers() {
@@ -378,6 +420,16 @@ export class TeenPattiTable {
   startTurnClock() {
     this.turnStartedAt = this.now();
     const player = this.turnPlayer;
+    // Blind-round limit: past it, a blind player is automatically seen at the
+    // start of their turn (they keep the turn — just at chaal rates now).
+    if (
+      this.config.maxBlindRounds > 0
+      && this.round > this.config.maxBlindRounds
+      && player && player.inHand && !player.packed && !player.seen
+    ) {
+      this.pushLog(`${player.name} reached the ${this.config.maxBlindRounds} blind round limit — cards turned over`);
+      this.see(player.id);
+    }
     // A player who lost their connection gets a much shorter clock: their seat
     // still plays out the hand, but nobody waits around for them.
     const offline = player && player.connected === false;
@@ -522,15 +574,21 @@ export class TeenPattiTable {
 
   /** Minimum stake a raise may be set to, given who is raising. */
   minRaiseFor(player) {
-    const step = Math.max(this.config.minRaise, Math.ceil(this.config.boot / 2));
-    let min = this.stake + step;
-    if (!player.seen) min = Math.max(min, this.stake * 2);
-    return min;
+    return this.stake + Math.max(1, this.config.minRaise);
   }
 
+  /**
+   * Highest stake a raise may set. Three caps apply:
+   *   • the chaal limit — at most `chaalLimit`× the current stake per turn
+   *     (blind bets 1x–2x, seen bets 2x–4x when chaalLimit is 2);
+   *   • what the player can actually pay (seen players pay 2× the stake);
+   *   • the table's optional hard stake cap (`maxStake`).
+   */
   maxRaiseFor(player) {
-    const affordable = player.seen ? player.chips : player.chips * 2;
-    const cap = this.config.maxStake > 0 ? Math.min(affordable, this.config.maxStake) : affordable;
+    const turnCap = Math.floor(this.stake * Math.max(1, this.config.chaalLimit));
+    const affordable = player.seen ? Math.floor(player.chips / 2) : player.chips;
+    let cap = Math.min(turnCap, affordable);
+    if (this.config.maxStake > 0) cap = Math.min(cap, this.config.maxStake);
     return Math.max(0, cap);
   }
 
@@ -566,9 +624,13 @@ export class TeenPattiTable {
   handleAllIn(player, payload = {}) {
     const amount = player.chips;
     if (amount <= 0) throw new Error('Nothing left to bet');
+    const stakeBefore = this.stake;
     const paid = this.pay(player, amount);
-    // A blind all-in of X is worth a seen stake of 2X (blind bets at half rate).
-    const equivalentStake = player.seen ? paid : paid * 2;
+    // A seen bet of X is worth a blind stake of X/2. The all-in can bump the
+    // stake, but never beyond the per-turn chaal limit.
+    const equivalent = player.seen ? Math.floor(paid / 2) : paid;
+    const turnCap = Math.floor(stakeBefore * Math.max(1, this.config.chaalLimit));
+    const equivalentStake = Math.min(equivalent, turnCap);
     const raised = equivalentStake > this.stake;
     if (raised) this.stake = equivalentStake;
     player.lastAction = ACTION.ALL_IN;
@@ -612,16 +674,18 @@ export class TeenPattiTable {
       pot: this.potTotal
     });
     this.pushLog(`${player.name} called a show (paid ${paid})`);
-    this.showdown('show');
+    this.showdown('show', { callerId: player.id });
   }
 
   canSideShow(player) {
     if (!this.config.sideshow) return false;
     if (!player.seen || player.allIn) return false;
+    if (player.chips < this.chaalCost) return false; // the request costs a chaal
     if (this.activePlayers.length < 3) return false;
     const target = this.playerAt(this.previousActiveSeat(player.seat));
     if (!target || target.id === player.id) return false;
-    return target.inHand && !target.packed && !target.allIn;
+    // Spec: only against another *seen* player who is still live.
+    return target.inHand && !target.packed && !target.allIn && target.seen;
   }
 
   handleSideShowRequest(player, payload = {}) {
@@ -633,19 +697,25 @@ export class TeenPattiTable {
     if (!target) throw new Error('No player to compare with');
     if (target.id === player.id) throw new Error('No player to compare with');
     if (target.allIn) throw new Error(`${target.name} is all-in — no side show possible`);
+    if (!target.seen) throw new Error(`${target.name} is playing blind — you can only compare with a seen player`);
+    const cost = this.chaalCost;
+    if (player.chips < cost) throw new Error(`A side show costs your chaal (${cost}) — not enough chips`);
+    // The request costs the normal chaal and consumes the turn: whatever the
+    // outcome, the requester has acted this round.
+    const paid = this.pay(player, cost);
     player.lastAction = ACTION.SIDE_SHOW;
+    this.pending.delete(player.id);
     this.sideShow = {
       requesterId: player.id,
       requesterSeat: player.seat,
       targetId: target.id,
       targetSeat: target.seat,
+      amount: paid,
       deadline: this.now() + this.config.sideShowSeconds * 1000
     };
     this.sideShowDeadline = this.sideShow.deadline;
-    this.pushEvent({ type: 'sideshow:request', ...this.sideShow });
-    this.pushLog(`${player.name} asked ${target.name} for a side show`);
-    // The requester keeps their turn: after the comparison resolves they must
-    // still make a betting decision.
+    this.pushEvent({ type: 'sideshow:request', ...this.sideShow, pot: this.potTotal });
+    this.pushLog(`${player.name} paid ${paid} and asked ${target.name} for a side show`);
     return this.sideShow;
   }
 
@@ -661,15 +731,14 @@ export class TeenPattiTable {
     if (!accept) {
       this.pushEvent({ type: 'sideshow:declined', ...request });
       this.pushLog(`${target.name} declined the side show`);
-      if (this.turnSeat === requester.seat) this.startTurnClock();
+      // The requester already paid their chaal — the turn moves on.
+      if (this.phase === PHASE.BETTING) this.advanceTurn();
       return null;
     }
 
-    // A blind player who is asked to compare must look at their cards first.
-    if (!target.seen) this.see(target.id);
-
-    const requesterHand = evaluate(requester.cards);
-    const targetHand = evaluate(target.cards);
+    const requesterHand = evaluate(requester.cards, this.rules);
+    const targetHand = evaluate(target.cards, this.rules);
+    // Ties pack the requester: winner only when strictly higher.
     const winner = compareKeys(requesterHand.key, targetHand.key) > 0 ? requester : target;
     const loser = winner === requester ? target : requester;
     loser.packed = true;
@@ -686,8 +755,8 @@ export class TeenPattiTable {
       targetCards: target.cards.slice()
     });
     this.pushLog(`${winner.name} won the side show — ${loser.name} packed`);
-    if (this.turnSeat === requester.seat && requester.packed) this.advanceTurn();
-    else if (this.phase === PHASE.BETTING) this.maybeShowdown();
+    // The requester's chaal was their action, so the turn always moves on.
+    if (this.phase === PHASE.BETTING) this.advanceTurn();
     return { winnerId: winner.id, loserId: loser.id };
   }
 
@@ -699,6 +768,12 @@ export class TeenPattiTable {
 
     // No more betting possible: everybody else is all-in.
     if (this.actionablePlayers.length <= 1) return this.showdown('allin');
+
+    // Pot limit reached: everyone still live is forced to show.
+    if (this.config.potLimit > 0 && this.potTotal >= this.config.potLimit) {
+      this.pushLog(`Pot limit of ${this.config.potLimit} reached — everyone shows`);
+      return this.showdown('potlimit');
+    }
 
     const currentSeat = this.turnSeat;
     this.pending = new Set([...this.pending].filter((id) => {
@@ -735,6 +810,10 @@ export class TeenPattiTable {
     if (this.phase !== PHASE.BETTING) return;
     if (this.activePlayers.length <= 1) return this.showdown('fold');
     if (this.actionablePlayers.length <= 1) return this.showdown('allin');
+    if (this.config.potLimit > 0 && this.potTotal >= this.config.potLimit) {
+      this.pushLog(`Pot limit of ${this.config.potLimit} reached — everyone shows`);
+      return this.showdown('potlimit');
+    }
   }
 
   /** Timer hook — the host owns the clock. */
@@ -765,17 +844,25 @@ export class TeenPattiTable {
 
   /**
    * Resolve the hand.
-   * @param {'fold'|'show'|'rounds'|'allin'} reason
+   * @param {'fold'|'show'|'rounds'|'allin'|'potlimit'} reason
+   * @param {{callerId?: string}} [opts] - who asked, for a requested show.
    */
-  showdown(reason) {
+  showdown(reason, opts = {}) {
     if (this.phase !== PHASE.BETTING) return;
     this.phase = PHASE.SHOWDOWN;
     this.turnSeat = -1;
     this.turnDeadline = 0;
     const live = this.activePlayers;
+    /**
+     * Tie policy: in a *requested* show the caller loses ties (configurable);
+     * forced shows (pot limit / round limit / all-in) split the pot.
+     */
+    const showCallerId = reason === 'show' && this.config.showTie === 'caller-loses'
+      ? opts.callerId || null
+      : null;
 
     const evaluations = new Map();
-    for (const player of live) evaluations.set(player.id, evaluate(player.cards));
+    for (const player of live) evaluations.set(player.id, evaluate(player.cards, this.rules));
 
     const contributions = new Map();
     for (const player of this.players) if (player.committed > 0) contributions.set(player.id, player.committed);
@@ -808,7 +895,12 @@ export class TeenPattiTable {
         for (const player of eligible.slice(1)) {
           if (compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) > 0) best = player;
         }
-        const tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        let tied = eligible.filter((player) => compareKeys(evaluations.get(player.id).key, evaluations.get(best.id).key) === 0);
+        // Requested-show tie: the player who asked for the show loses it.
+        if (showCallerId && tied.length > 1 && tied.some((player) => player.id === showCallerId)) {
+          const withoutCaller = tied.filter((player) => player.id !== showCallerId);
+          if (withoutCaller.length > 0) tied = withoutCaller;
+        }
         const share = Math.floor(layerPot / tied.length);
         let remainder = layerPot - share * tied.length;
         for (const player of tied) {
@@ -937,7 +1029,7 @@ export class TeenPattiTable {
   /** Ranked strength of the viewer's own hand (used for the "your hand" widget). */
   handInfo(cards) {
     if (!cards || cards.length !== 3) return null;
-    const evaluation = evaluate(cards);
+    const evaluation = evaluate(cards, this.rules);
     return {
       category: evaluation.category,
       name: evaluation.name,
@@ -1029,10 +1121,13 @@ export class TeenPattiTable {
           raise: isTurn && maxRaise >= minRaise,
           minRaise,
           maxRaise,
+          /** Chips paid per point of stake raised to: seen pays double. */
+          raiseRate: viewer.seen ? 2 : 1,
           allIn: isTurn && viewer.chips > 0,
           allInAmount: viewer.chips,
           show: isTurn && this.canShow(viewer),
           sideShow: isTurn && this.canSideShow(viewer),
+          sideShowCost: this.chaalCost,
           see: !viewer.seen && viewer.inHand && !viewer.packed,
           rebuy: viewer.chips < this.config.boot
         }
@@ -1049,6 +1144,7 @@ export class TeenPattiTable {
       pot: this.potTotal,
       stake: this.stake,
       blindCost: this.blindCost,
+      chaalCost: this.chaalCost,
       dealerSeat: this.dealerSeat,
       turnSeat: this.turnSeat,
       turnDeadline: this.turnDeadline,
@@ -1060,6 +1156,11 @@ export class TeenPattiTable {
         turnSeconds: this.config.turnSeconds,
         minRaise: this.config.minRaise,
         maxStake: this.config.maxStake,
+        chaalLimit: this.config.chaalLimit,
+        potLimit: this.config.potLimit,
+        maxBlindRounds: this.config.maxBlindRounds,
+        showTie: this.config.showTie,
+        sequenceOrder: this.config.sequenceOrder,
         sideshow: this.config.sideshow,
         startChips: this.config.startChips,
         minBuyIn: this.config.minBuyIn,

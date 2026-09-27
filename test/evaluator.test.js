@@ -46,16 +46,28 @@ test('trails compare by rank', () => {
   assert.equal(compareHands(['2S', '2H', '2D'], ['AS', 'AH', 'AD']), -1);
 });
 
-test('A-2-3 is the lowest pure sequence and A-K-Q the highest', () => {
+test('sequence order: A-K-Q > A-2-3 > K-Q-J by default (house rule configurable)', () => {
   assert.equal(sequenceHigh([14, 3, 2]), 3);
   assert.equal(sequenceHigh([14, 13, 12]), 14);
   assert.equal(sequenceHigh([7, 6, 5]), 7);
   assert.equal(sequenceHigh([14, 5, 4]), 0, 'A-5-4 is not a run');
 
-  const best = ['AS', 'KS', 'QS'];
-  assert.equal(compareHands(best, ['4H', '3H', '2H']), 1, 'A-K-Q beats 4-3-2');
-  assert.equal(compareHands(['4H', '3H', '2H'], ['AS', '3S', '2S']), 1, 'any run beats A-2-3');
-  assert.equal(compareHands(['AH', '3H', '2H'], ['4C', '3C', '2C']), -1, 'A-2-3 loses to 4-3-2');
+  // Default order: A-K-Q highest, then A-2-3, then K-Q-J down to 4-3-2.
+  const akq = ['AS', 'KS', 'QS'];
+  const a23 = ['AH', '3H', '2H'];
+  const kqj = ['KC', 'QC', 'JC'];
+  assert.equal(compareHands(akq, a23), 1, 'A-K-Q beats A-2-3');
+  assert.equal(compareHands(a23, kqj), 1, 'A-2-3 beats K-Q-J by default');
+  assert.equal(compareHands(a23, ['4C', '3C', '2C']), 1, 'A-2-3 beats 4-3-2');
+  assert.equal(compareHands(kqj, ['QS', 'JS', '10S']), 1, 'other runs still compare by high card');
+
+  // House rule 'a23-lowest': every other run beats A-2-3.
+  const low = { sequenceOrder: 'a23-lowest' };
+  assert.equal(compareHands(evaluate(akq, low), evaluate(a23, low)), 1, 'A-K-Q still beats A-2-3');
+  assert.equal(compareHands(evaluate(['4H', '3H', '2H'], low), evaluate(['AS', '3S', '2S'], low)), 1,
+    'under the house rule any run beats A-2-3');
+  assert.equal(compareHands(evaluate(a23, low), evaluate(['4C', '3C', '2C'], low)), -1,
+    'A-2-3 loses to 4-3-2 under the house rule');
 });
 
 test('pairs are decided by pair rank, then kicker', () => {

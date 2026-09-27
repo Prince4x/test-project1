@@ -70,8 +70,26 @@ export function createRng(seed = Date.now()) {
   };
 }
 
-/** Fisher-Yates shuffle. Pass a seeded rng for reproducible deals. */
-export function shuffle(cards, rng = Math.random) {
+/**
+ * Cryptographically secure random floats in [0, 1).
+ *
+ * Real deals must not be predictable, so the default shuffle draws from the
+ * platform CSPRNG (`crypto.getRandomValues` — available in every browser and
+ * in Node 20+). Falls back to Math.random only when no crypto is available
+ * (ancient embedded WebViews), because a playable game beats a hard crash.
+ */
+export function secureRandom() {
+  const cryptoObj = typeof globalThis !== 'undefined' ? globalThis.crypto : null;
+  if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    const buffer = new Uint32Array(1);
+    cryptoObj.getRandomValues(buffer);
+    return buffer[0] / 4294967296;
+  }
+  return Math.random();
+}
+
+/** Fisher-Yates shuffle. Uses the CSPRNG by default; pass a seeded rng for reproducible deals. */
+export function shuffle(cards, rng = secureRandom) {
   const out = cards.slice();
   for (let i = out.length - 1; i > 0; i -= 1) {
     const j = Math.floor(rng() * (i + 1));

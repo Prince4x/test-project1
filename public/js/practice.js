@@ -50,7 +50,7 @@ export class PracticeController {
       boot,
       startChips: Math.max(1000, boot * 100),
       maxBuyIn: Math.max(1000, boot * 100),
-      minRaise: Math.max(2, Math.ceil(boot / 2)),
+      minRaise: 1,
       maxRounds: Number(this.settings.practiceRounds) || 4,
       turnSeconds: turnSeconds > 0 ? turnSeconds : 9999,
       sideshow: true,
@@ -207,7 +207,7 @@ export class PracticeController {
           } else if (now >= this.nextBotAt) {
             this.sideShowFor = null;
             const profile = PERSONALITIES[target.personality] || PERSONALITIES.balanced;
-            const strength = target.seen ? handStrength(evaluate(target.cards)) : 0.5;
+            const strength = target.seen ? handStrength(evaluate(target.cards, table.rules)) : 0.5;
             table.respondSideShow(target.id, strength > 0.62 - profile.aggression * 0.3);
             this.publish();
           }
@@ -268,6 +268,7 @@ export class PracticeController {
       canShow: table.canShow(player),
       canSideShow: table.canSideShow(player),
       personality: player.personality,
+      rules: table.rules,
       rng: Math.random
     };
 

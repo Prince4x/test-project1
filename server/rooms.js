@@ -390,7 +390,7 @@ export class RoomManager {
             room.botSideShowFor = null;
             room.nextBotActionAt = 0;
             const seen = target.seen;
-            const strength = seen ? handStrength(evaluate(target.cards)) : 0.5;
+            const strength = seen ? handStrength(evaluate(target.cards, table.rules)) : 0.5;
             const profile = PERSONALITIES[target.personality] || PERSONALITIES.balanced;
             table.respondSideShow(target.id, seen && strength > 0.42 + (1 - profile.sideShow) * 0.2);
             this.maybeBotChat(room, target, 'sideshow', 0.25);
@@ -445,6 +445,7 @@ export class RoomManager {
       canShow: table.canShow(player),
       canSideShow: table.canSideShow(player),
       personality: player.personality,
+      rules: table.rules,
       rng: Math.random
     };
 

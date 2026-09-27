@@ -67,26 +67,26 @@ test('packing around leaves one player who takes the pot', () => {
   assert.equal(table.players.find((player) => player.id === winner.id).chips, 1020);
 });
 
-test('blind players pay half the stake, seen players pay full', () => {
+test('blind players pay the stake, seen players pay double (chaal rate)', () => {
   const table = makeTable();
   table.startHand();
   const first = table.playerAt(table.turnSeat);
-  table.act(first.id, ACTION.CHAAL); // blind -> pays ceil(10/2) = 5
-  assert.equal(first.lastBet, 5);
+  table.act(first.id, ACTION.CHAAL); // blind -> pays 1x stake = 10
+  assert.equal(first.lastBet, 10);
 
   const second = table.playerAt(table.turnSeat);
   table.act(second.id, ACTION.SEE);
-  table.act(second.id, ACTION.CHAAL); // seen -> pays 10
-  assert.equal(second.lastBet, 10);
+  table.act(second.id, ACTION.CHAAL); // seen -> pays 2x stake = 20
+  assert.equal(second.lastBet, 20);
 });
 
 test('a raise resets the round so everybody must respond', () => {
   const table = makeTable();
   table.startHand();
   const raiser = table.playerAt(table.turnSeat);
-  table.act(raiser.id, ACTION.RAISE, { stake: 20 });
+  table.act(raiser.id, ACTION.RAISE, { stake: 20 }); // blind raise to the 2x cap
   assert.equal(table.stake, 20);
-  assert.equal(raiser.lastBet, 10, 'a blind raiser pays half of the new stake');
+  assert.equal(raiser.lastBet, 20, 'a blind raiser pays the new stake');
   assert.equal(table.pending.size, 2);
   assert.ok(!table.pending.has(raiser.id));
 
@@ -142,7 +142,8 @@ test('showdown reveals hands and awards the pot to the best hand', () => {
 });
 
 test('all-in players are protected by side pots', () => {
-  const fresh = new TeenPattiTable({ ...DEFAULT_CONFIG, seed: 7 });
+  // chaalLimit lifted so the big stacks can build a big pot in one raise.
+  const fresh = new TeenPattiTable({ ...DEFAULT_CONFIG, seed: 7, chaalLimit: 40 });
   fresh.addPlayer({ id: 'short', name: 'Short', chips: 10 });
   fresh.addPlayer({ id: 'big1', name: 'Big1', chips: 2000 });
   fresh.addPlayer({ id: 'big2', name: 'Big2', chips: 2000 });
@@ -178,12 +179,13 @@ test('all-in players are protected by side pots', () => {
   const winnings = Object.fromEntries(fresh.results.winners.map((winner) => [winner.id, winner.amount]));
   // Layer 1: everybody's first 10 chips (30) — short holds the nuts and takes it.
   assert.equal(winnings.short, 30);
-  // Layer 2: the 300 chip layer, contested only by the players who covered it.
-  assert.equal(winnings.big1, 600);
+  // Layer 2: the seen bets (2x the 300 stake = 600 each), contested only by
+  // the players who covered it.
+  assert.equal(winnings.big1, 1200);
   assert.equal(winnings.big2, undefined, 'the worst hand wins nothing');
   assert.equal(fresh.getPlayer('short').chips, 30);
-  assert.equal(fresh.getPlayer('big1').chips, 2290);
-  assert.equal(fresh.getPlayer('big2').chips, 1690);
+  assert.equal(fresh.getPlayer('big1').chips, 2590);
+  assert.equal(fresh.getPlayer('big2').chips, 1390);
   assert.equal(totalChips(fresh), before, 'chips are conserved');
   assert.deepEqual(order, ['big1', 'big2']);
 });
@@ -262,7 +264,7 @@ test('a disconnected player is put on a short clock so the table keeps moving', 
   assert.equal(table.serialize(slow.id).turnSeconds, 30, 'the next player is back on the normal clock');
 });
 
-test('side show: the weaker hand packs, the requester keeps the turn', () => {
+test('side show costs the chaal, the weaker hand packs and the turn moves on', () => {
   const table = makeTable({ sideshow: true });
   table.startHand();
   const requester = table.turnPlayer;
@@ -270,30 +272,58 @@ test('side show: the weaker hand packs, the requester keeps the turn', () => {
   const target = table.playerAt((requester.seat - 1 + 6) % 6);
   assert.ok(target, 'there is a neighbour to ask');
   target.cards = ['2S', '7H', '9D'];
+  table.see(target.id); // spec: only a seen player can be asked
   table.act(requester.id, ACTION.SEE);
+  const chipsBefore = requester.chips;
   table.act(requester.id, ACTION.SIDE_SHOW);
 
   assert.ok(table.sideShow, 'a side show is pending');
-  assert.equal(table.turnSeat, requester.seat, 'the requester keeps the turn');
+  assert.equal(requester.chips, chipsBefore - 20, 'the request costs the normal chaal (2x stake)');
+  assert.equal(table.sideShow.amount, 20);
   assert.throws(() => table.act(requester.id, ACTION.CHAAL), /side show/);
 
   table.respondSideShow(target.id, true);
-  assert.equal(target.packed, true);
-  assert.equal(table.turnSeat, requester.seat);
+  assert.equal(target.packed, true, 'the weaker hand packs');
   assert.equal(table.sideShow, null);
+  assert.notEqual(table.turnSeat, requester.seat, 'the paid chaal was the requester\'s action — the turn moves on');
 });
 
-test('declining a side show resumes normal play', () => {
+test('a blind neighbour cannot be asked for a side show', () => {
+  const table = makeTable({ sideshow: true });
+  table.startHand();
+  const requester = table.turnPlayer;
+  table.act(requester.id, ACTION.SEE);
+  // The previous player is still blind, so the request must be refused.
+  assert.throws(() => table.act(requester.id, ACTION.SIDE_SHOW), /playing blind/);
+});
+
+test('declining a side show resumes normal play (the requester has already bet)', () => {
   const table = makeTable({ sideshow: true });
   table.startHand();
   const requester = table.turnPlayer;
   const target = table.playerAt((requester.seat - 1 + 6) % 6);
+  table.see(target.id);
   table.act(requester.id, ACTION.SEE);
   table.act(requester.id, ACTION.SIDE_SHOW);
   table.respondSideShow(target.id, false);
+  assert.equal(target.packed, false, 'declining costs the target nothing');
+  assert.notEqual(table.turnSeat, requester.seat, 'the requester paid their chaal — play continues');
+  assert.ok(!table.pending.has(requester.id), 'the requester has acted this round');
+});
+
+test('side show ties pack the requester', () => {
+  const table = makeTable({ sideshow: true });
+  table.startHand();
+  const requester = table.turnPlayer;
+  const target = table.playerAt((requester.seat - 1 + 6) % 6);
+  requester.cards = ['KS', 'KH', '9D'];
+  target.cards = ['KC', 'KD', '9H']; // identical strength
+  table.see(target.id);
+  table.act(requester.id, ACTION.SEE);
+  table.act(requester.id, ACTION.SIDE_SHOW);
+  table.respondSideShow(target.id, true);
+  assert.equal(requester.packed, true, 'on a tie the requester packs');
   assert.equal(target.packed, false);
-  table.act(requester.id, ACTION.CHAAL);
-  assert.notEqual(table.turnSeat, requester.seat);
 });
 
 test('a show can only be called heads-up and ends the hand immediately', () => {
