@@ -356,14 +356,17 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
   background: rgba(0, 0, 0, 0.62);
   border: 1px solid rgba(245, 196, 81, 0.35);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  min-width: 230px; justify-content: center;
 }
-.pot-display .pot-value { font-size: 23px; font-weight: 800; color: var(--gold); letter-spacing: -0.01em; }
+.pot-display .pot-value { font-size: 23px; font-weight: 800; color: var(--gold); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .pot-display .pot-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.6); }
-.pot-display .stake { font-size: 12px; color: rgba(255, 255, 255, 0.78); }
+.pot-display .stake { font-size: 12px; color: rgba(255, 255, 255, 0.78); font-variant-numeric: tabular-nums; }
 .pot-display.bump { animation: potBump calc(0.5s / var(--anim-speed)) ease; }
 @keyframes potBump { 0% { transform: scale(1); } 40% { transform: scale(1.09); } 100% { transform: scale(1); } }
 
-.chip-stack { display: flex; gap: -6px; }
+.chip-stack { display: flex; height: 20px; width: 132px; justify-content: center; align-items: center; overflow: hidden; }
+.chip-stack .chip { margin-left: -6px; flex: none; }
+.chip-stack .chip:first-child { margin-left: 0; }
 .chip {
   width: 22px; height: 22px; border-radius: 50%;
   border: 2px dashed rgba(255, 255, 255, 0.75);
@@ -386,6 +389,7 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
   transition: filter calc(0.25s / var(--anim-speed)), opacity calc(0.25s / var(--anim-speed));
 }
 .seat .seat-card {
+  width: 100%; box-sizing: border-box;
   position: relative;
   width: 100%;
   display: flex; align-items: center; gap: 10px;
@@ -411,8 +415,8 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
 }
 .seat .who { min-width: 0; flex: 1; }
 .seat .who b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.seat .who .chips { font-size: 12.5px; color: var(--gold); font-weight: 700; }
-.seat .badges { display: flex; gap: 4px; align-items: center; }
+.seat .who .chips { font-size: 12.5px; color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.seat .badges { display: flex; gap: 4px; align-items: center; flex-wrap: nowrap; overflow: hidden; min-height: 18px; }
 .seat .tag {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   padding: 2px 6px; border-radius: 6px;
@@ -426,8 +430,11 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
 .seat .tag.offline { background: rgba(239, 75, 92, 0.2); color: #ffb0b8; }
 
 .seat .seat-hand { display: flex; gap: 4px; margin-top: -2px; }
-.seat .seat-meta { display: flex; gap: 6px; align-items: center; min-height: 20px; }
-.seat .stack { font-size: 11.5px; color: rgba(255, 255, 255, 0.72); font-weight: 650; }
+.seat .seat-meta { display: flex; gap: 6px; align-items: center; height: 20px; overflow: hidden; }
+.seat .stack {
+  font-size: 11.5px; color: rgba(255, 255, 255, 0.72); font-weight: 650;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 .timer-ring { position: absolute; inset: -5px; pointer-events: none; }
 .timer-ring circle { fill: none; stroke-width: 3; }
@@ -504,6 +511,10 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
 /* player panel */
 .player-panel {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  /* HARD height on desktop: any panel-height change resizes the felt above
+     and physically shifts every seat (and its cards) — the board flicker.
+     Children shrink (min-width: 0) rather than wrap into a second row. */
+  height: 132px; flex-wrap: nowrap; overflow: hidden;
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(10, 15, 20, 0.92), rgba(10, 15, 20, 0.97));
@@ -511,15 +522,15 @@ body[data-theme='light'] .game-top { background: rgba(255, 255, 255, 0.92); }
 }
 body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), #fff); }
 
-.my-cards { display: flex; align-items: center; gap: 10px; }
-.my-cards .hand-label { display: flex; flex-direction: column; gap: 4px; }
-.my-cards .hand-label b { font-size: 14px; color: var(--gold); }
-.my-cards .hand-label span { font-size: 11.5px; color: var(--text-dim); }
+.my-cards { display: flex; align-items: center; gap: 10px; min-width: 0; flex-shrink: 1; }
+.my-cards .hand-label { display: flex; flex-direction: column; gap: 4px; flex: 0 0 200px; max-width: 46vw; }
+.my-cards .hand-label b { font-size: 14px; color: var(--gold); height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.my-cards .hand-label span { font-size: 11.5px; color: var(--text-dim); display: block; height: 32px; overflow: hidden; }
 .hole-cards { display: flex; gap: 8px; }
 
 /* min-height matches the buttons row so swapping banner <-> buttons never
    changes the panel height — the felt above stayed put instead of jumping. */
-.action-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; min-height: 58px; }
+.action-bar { display: flex; align-items: center; align-content: center; gap: 8px 10px; flex-wrap: wrap; flex: 1 1 320px; justify-content: flex-end; min-height: 58px; min-width: 0; }
 .action-bar .group {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: 14px;
@@ -772,11 +783,25 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .tutorial-demo { display: flex; gap: 6px; align-items: center; }
 
 /* mobile */
+/* Compact action bar before the hard nowrap row would clip: drop the button
+   captions and slim the raise widget so everything genuinely fits. */
+@media (max-width: 1220px) {
+  .btn.action .sub { display: none; }
+  .btn.action { padding: 10px 12px; }
+  .raise-widget { min-width: 0; gap: 8px; }
+  .raise-widget .steppers { display: none; } /* the slider already covers it */
+  .raise-widget .tiny.muted, .raise-widget .sub.muted { display: none; } /* captions */
+  .raise-widget input[type='range'] { width: 100px; }
+  .my-cards .hand-label { flex-basis: 170px; }
+}
+
 @media (max-width: 900px) {
   .felt { border-radius: 30px; max-height: none; width: 100%; }
   /* Seat width is viewport-based so the ring never clips on narrow screens. */
   .seat { width: min(30vw, 190px); }
-  .player-panel { gap: 10px; }
+  /* Small screens need the flexible two-row panel back (height varies, but
+     touch scrolling makes the shift far less noticeable than clipped buttons). */
+  .player-panel { gap: 10px; height: auto; min-height: 132px; flex-wrap: wrap; overflow: visible; }
   .action-bar { margin-left: 0; width: 100%; }
   .btn.action { min-width: 0; flex: 1 1 auto; padding: 8px 10px; }
   .raise-widget { min-width: 0; width: 100%; }
@@ -785,7 +810,8 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 @media (max-width: 560px) {
   .seat { width: 26vw; }
   .seat .avatar { width: 30px; height: 30px; font-size: 15px; border-radius: 9px; }
-  .seat .seat-card { padding: 6px 8px; gap: 6px; border-radius: 11px; }
+  .seat .seat-card {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; gap: 6px; border-radius: 11px; }
   .seat .who b { font-size: 11px; }
   .seat .who .chips { font-size: 10.5px; }
   .seat .tag { font-size: 9px; padding: 1px 4px; }
@@ -5597,6 +5623,24 @@ class GameView {
     ]);
     nodes.push(actionGroup);
 
+    // Show / side-show sit beside the main buttons so that, when the bar
+    // wraps inside the fixed-height panel, they land on the first row and
+    // the (wide) raise widget takes the second — nothing gets clipped.
+    if (options.show) {
+      nodes.push(el('button', {
+        class: 'btn action show',
+        title: 'Heads-up: pay the show cost and compare hands right now',
+        onclick: () => this.act(ACTION.SHOW)
+      }, [el('span', { text: 'Show' }), el('span', { class: 'sub', text: 'compare now' })]));
+    }
+    if (options.sideShow) {
+      nodes.push(el('button', {
+        class: 'btn action',
+        title: 'Pay your chaal to compare with the player on your right — the weaker hand packs, ties pack you',
+        onclick: () => this.act(ACTION.SIDE_SHOW)
+      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: formatChips(options.sideShowCost || 0) })]));
+    }
+
     if (options.raise) {
       const min = options.minRaise;
       const max = options.maxRaise;
@@ -5654,22 +5698,6 @@ class GameView {
         class: 'btn action raise',
         onclick: () => this.act(ACTION.RAISE, { stake: this.raiseValue })
       }, [el('span', { text: 'Raise' }), el('span', { class: 'sub', text: `min ${formatChips(min)}` })]));
-    }
-
-    if (options.show) {
-      nodes.push(el('button', {
-        class: 'btn action show',
-        title: 'Heads-up: pay the show cost and compare hands right now',
-        onclick: () => this.act(ACTION.SHOW)
-      }, [el('span', { text: 'Show' }), el('span', { class: 'sub', text: 'compare now' })]));
-    }
-
-    if (options.sideShow) {
-      nodes.push(el('button', {
-        class: 'btn action',
-        title: 'Pay your chaal to compare with the player on your right — the weaker hand packs, ties pack you',
-        onclick: () => this.act(ACTION.SIDE_SHOW)
-      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: formatChips(options.sideShowCost || 0) })]));
     }
 
     bar.replaceChildren(...nodes);
@@ -5778,6 +5806,7 @@ class GameView {
   // ─────────────────────────────────────────────────────────────── events ──
 
   handleEvents(events, snapshot) {
+    snapshot = snapshot || this.snapshot; // practice mode calls without one
     for (const event of events) {
       switch (event.type) {
         case 'hand:start': {
@@ -6196,7 +6225,7 @@ const SPEED = { slow: 0.55, normal: 1, fast: 1.6 };
  * in the corner probe, so "is this tab running the new code?" takes two
  * seconds to answer. Bump when shipping a fix a player needs to verify.
  */
-const CLIENT_BUILD = '2026-09-27g';
+const CLIENT_BUILD = '2026-09-27h';
 
 class App {
   constructor() {

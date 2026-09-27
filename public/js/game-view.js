@@ -609,6 +609,24 @@ export class GameView {
     ]);
     nodes.push(actionGroup);
 
+    // Show / side-show sit beside the main buttons so that, when the bar
+    // wraps inside the fixed-height panel, they land on the first row and
+    // the (wide) raise widget takes the second — nothing gets clipped.
+    if (options.show) {
+      nodes.push(el('button', {
+        class: 'btn action show',
+        title: 'Heads-up: pay the show cost and compare hands right now',
+        onclick: () => this.act(ACTION.SHOW)
+      }, [el('span', { text: 'Show' }), el('span', { class: 'sub', text: 'compare now' })]));
+    }
+    if (options.sideShow) {
+      nodes.push(el('button', {
+        class: 'btn action',
+        title: 'Pay your chaal to compare with the player on your right — the weaker hand packs, ties pack you',
+        onclick: () => this.act(ACTION.SIDE_SHOW)
+      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: formatChips(options.sideShowCost || 0) })]));
+    }
+
     if (options.raise) {
       const min = options.minRaise;
       const max = options.maxRaise;
@@ -666,22 +684,6 @@ export class GameView {
         class: 'btn action raise',
         onclick: () => this.act(ACTION.RAISE, { stake: this.raiseValue })
       }, [el('span', { text: 'Raise' }), el('span', { class: 'sub', text: `min ${formatChips(min)}` })]));
-    }
-
-    if (options.show) {
-      nodes.push(el('button', {
-        class: 'btn action show',
-        title: 'Heads-up: pay the show cost and compare hands right now',
-        onclick: () => this.act(ACTION.SHOW)
-      }, [el('span', { text: 'Show' }), el('span', { class: 'sub', text: 'compare now' })]));
-    }
-
-    if (options.sideShow) {
-      nodes.push(el('button', {
-        class: 'btn action',
-        title: 'Pay your chaal to compare with the player on your right — the weaker hand packs, ties pack you',
-        onclick: () => this.act(ACTION.SIDE_SHOW)
-      }, [el('span', { text: '⚔ Side show' }), el('span', { class: 'sub', text: formatChips(options.sideShowCost || 0) })]));
     }
 
     bar.replaceChildren(...nodes);
@@ -790,6 +792,7 @@ export class GameView {
   // ─────────────────────────────────────────────────────────────── events ──
 
   handleEvents(events, snapshot) {
+    snapshot = snapshot || this.snapshot; // practice mode calls without one
     for (const event of events) {
       switch (event.type) {
         case 'hand:start': {
