@@ -708,6 +708,29 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .reaction-bar button { font-size: 19px; padding: 6px 9px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); }
 .reaction-bar button:hover { background: var(--gold-soft); }
 
+/* game mode picker */
+.mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mode-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 6px 8px; border-radius: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+  color: var(--text); transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.mode-card:hover { background: rgba(255, 255, 255, 0.08); transform: translateY(-1px); }
+.mode-card.selected {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  box-shadow: 0 0 14px rgba(245, 196, 81, 0.18);
+}
+.mode-card .mode-icon { font-size: 22px; line-height: 1; }
+.mode-card .mode-name { font-size: 12px; font-weight: 700; }
+.mode-card .mode-info {
+  position: absolute; top: 4px; right: 6px; font-size: 12px; color: var(--text-dim);
+  padding: 2px; border-radius: 50%;
+}
+.mode-card .mode-info:hover { color: var(--gold); }
+.pill.mode { border-color: var(--gold); color: var(--gold); }
+
 /* settings */
 .setting-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .setting-row:last-child { border-bottom: none; }
@@ -1342,6 +1365,10 @@ body[data-theme='light'] .share-bar .share-url { background: #fff; }
         <div class="row wrap">
           <span class="mini-pill" id="pill-best-hand">Best hand: —</span>
         </div>
+        <div class="field" style="margin-top:12px">
+          <label>Game mode</label>
+          <div class="mode-grid" id="mode-grid"></div>
+        </div>
         <details class="practice-options" id="practice-options">
           <summary>Practice table settings</summary>
           <div class="split" style="margin-top:12px">
@@ -1426,6 +1453,7 @@ body[data-theme='light'] .share-bar .share-url { background: #fff; }
       <span class="pill gold" id="game-pot">Pot 0</span>
       <span class="pill" id="game-stake">Stake 10</span>
       <span class="pill blue" id="game-round">Round 1/4</span>
+      <span class="pill mode" id="game-mode" hidden>🃏 Classic</span>
       <span class="pill green" id="game-chips">💠 1000</span>
     </div>
     <div class="top-actions">
@@ -1662,7 +1690,7 @@ __define("src/engine/evaluator.js", function (__exports, __require) {
  * rank-ordered tie-breakers implemented below.
  */
 
-const { parseCard, RANK_LABEL, SUIT_NAME, SUIT_LABEL } = __require("src/engine/cards.js");
+const { parseCard, makeCard, SUITS, RANK_LABEL, SUIT_NAME, SUIT_LABEL } = __require("src/engine/cards.js");
 
 const CATEGORY = {
   HIGH_CARD: 0,
@@ -1740,8 +1768,17 @@ function sequenceHigh(ranks) {
  */
 const SEQUENCE_ORDERS = ['a23-second', 'a23-lowest'];
 
+/**
+ * House rules the evaluator understands. Every game mode is expressed purely
+ * through this object — the evaluation logic itself is never duplicated:
+ *   - sequenceOrder: where the A-2-3 run ranks (see above).
+ *   - reversed:      Muflis / lowball — the *lowest* classic hand wins.
+ *   - wildRanks:     ranks that play as wild cards (Joker, AK47, 1942, …).
+ */
 const DEFAULT_RULES = Object.freeze({
-  sequenceOrder: 'a23-second'
+  sequenceOrder: 'a23-second',
+  reversed: false,
+  wildRanks: Object.freeze([])
 });
 
 /**
@@ -1758,17 +1795,10 @@ function runOrderValue(run, sequenceOrder = DEFAULT_RULES.sequenceOrder) {
 }
 
 /**
- * Evaluate three cards.
- * @param {string[]} cards - exactly three card ids, e.g. ['AS', 'KH', '10D'].
- * @param {{sequenceOrder?: string}} [rules] - house rules (see DEFAULT_RULES).
- * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
- *            key: number[], name: string, label: string, high: number}}
+ * Classic evaluation of three literal cards — no wilds, no reversal.
+ * The mode-aware `evaluate()` below builds on this.
  */
-function evaluate(cards, rules = DEFAULT_RULES) {
-  if (!Array.isArray(cards) || cards.length !== 3) {
-    throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
-  }
-  const sequenceOrder = rules?.sequenceOrder || DEFAULT_RULES.sequenceOrder;
+function evaluateBase(cards, sequenceOrder) {
   const parsed = cards.map(parseCard);
   const ranks = descRanks(cards);
   const suits = parsed.map((card) => card.suit);
@@ -1825,6 +1855,103 @@ function evaluate(cards, rules = DEFAULT_RULES) {
     run
   };
   result.text = describe(result);
+  return result;
+}
+
+/**
+ * Substitution candidates for one wild card. Only two suits ever matter:
+ * the suit that could complete a flush/pure sequence (the first fixed card's
+ * suit) and an off-suit that avoids one. Off-suits rotate per wild so several
+ * wilds can always land on different suits (needed to dodge an accidental
+ * Colour in Muflis). 13 ranks × 2 suits = 26 candidates per wild.
+ */
+function wildCandidates(flushSuit, wildIndex) {
+  const offs = SUITS.filter((suit) => suit !== flushSuit);
+  const offSuit = offs[wildIndex % offs.length];
+  const list = [];
+  for (let rank = 2; rank <= 14; rank += 1) {
+    list.push(makeCard(rank, flushSuit));
+    list.push(makeCard(rank, offSuit));
+  }
+  return list;
+}
+
+/**
+ * Evaluate three cards under the mode's house rules.
+ *
+ * Wild cards: every possible substitution is tried and the best resulting
+ * hand under the current ranking is kept — the *lowest* hand when `reversed`
+ * (Muflis). Reversal itself is expressed in the comparison `key`: element-wise
+ * negation inverts the whole ordering, so every consumer that compares keys
+ * (showdown, side show, side pots, the AI) is mode-aware for free.
+ *
+ * @param {string[]} cards - exactly three card ids, e.g. ['AS', 'KH', '10D'].
+ * @param {{sequenceOrder?: string, reversed?: boolean, wildRanks?: number[]}} [rules]
+ * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
+ *            key: number[], name: string, label: string, high: number,
+ *            reversed: boolean, wildCount: number, effectiveCards: string[]}}
+ */
+function evaluate(cards, rules = DEFAULT_RULES) {
+  if (!Array.isArray(cards) || cards.length !== 3) {
+    throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
+  }
+  const sequenceOrder = rules?.sequenceOrder || DEFAULT_RULES.sequenceOrder;
+  const reversed = Boolean(rules?.reversed);
+  const wildRanks = rules?.wildRanks?.length ? rules.wildRanks : null;
+
+  const parsed = cards.map(parseCard);
+  const wildIndices = wildRanks
+    ? parsed.map((card, index) => (wildRanks.includes(card.rank) ? index : -1)).filter((i) => i >= 0)
+    : [];
+
+  let base;
+  let effectiveCards = cards.slice();
+
+  if (!wildIndices.length) {
+    base = evaluateBase(cards, sequenceOrder);
+  } else {
+    // The suit that keeps a flush possible: any fixed card's suit (all fixed
+    // cards share it or no flush exists anyway), or spades with no fixed cards.
+    const fixed = parsed.filter((_, index) => !wildIndices.includes(index));
+    const flushSuit = fixed[0]?.suit || 'S';
+    const options = wildIndices.map((_, k) => wildCandidates(flushSuit, k));
+
+    let best = null;
+    let bestCards = null;
+    const chosen = new Array(wildIndices.length);
+    const search = (depth) => {
+      if (depth === wildIndices.length) {
+        const hand = cards.slice();
+        wildIndices.forEach((cardIndex, k) => { hand[cardIndex] = chosen[k]; });
+        const candidate = evaluateBase(hand, sequenceOrder);
+        const better = !best || (reversed
+          ? compareKeys(candidate.key, best.key) < 0
+          : compareKeys(candidate.key, best.key) > 0);
+        if (better) { best = candidate; bestCards = hand; }
+        return;
+      }
+      for (const card of options[depth]) {
+        chosen[depth] = card;
+        search(depth + 1);
+      }
+    };
+    search(0);
+    base = best;
+    effectiveCards = bestCards;
+  }
+
+  const result = {
+    ...base,
+    cards: cards.slice(),
+    effectiveCards,
+    wildCount: wildIndices.length,
+    wildIndices,
+    reversed,
+    key: reversed ? base.key.map((value) => -value) : base.key
+  };
+  if (wildIndices.length) {
+    result.text = `${base.text} · ${wildIndices.length} wild${wildIndices.length > 1 ? 's' : ''}`;
+  }
   return result;
 }
 
@@ -1894,6 +2021,12 @@ function bestOf(entries) {
  * score that keeps relative spacing between categories sensible for betting.
  */
 function handStrength(evaluation) {
+  // Muflis: the ranking is fully reversed, so the ordinal score simply flips.
+  if (evaluation.reversed) return 1 - classicStrength(evaluation);
+  return classicStrength(evaluation);
+}
+
+function classicStrength(evaluation) {
   const [top, second, third] = evaluation.tiebreak;
   const kicker = (evalObj, index) => (evalObj.tiebreak[index] ?? 0) / 14;
   switch (evaluation.category) {
@@ -1938,6 +2071,128 @@ __exports.compareHands = compareHands;
 __exports.bestOf = bestOf;
 __exports.handStrength = handStrength;
 });
+__define("src/engine/modes.js", function (__exports, __require) {
+/**
+ * Game-mode registry: ONE rules engine, many configs.
+ *
+ * A mode is nothing but a bundle of table-config overrides (wild ranks,
+ * reversed ranking, timers, limits…). The engine — evaluator + table — never
+ * branches on a mode id, so new variants are data, not code.
+ *
+ * `potLimitBoots` / `bootMultiplier` are relative knobs resolved against the
+ * table's boot by applyMode(), because the same mode must work at a 10-chip
+ * friendly table and a 100-chip high roller.
+ */
+
+const MODES = {
+  classic: {
+    id: 'classic',
+    name: 'Classic',
+    icon: '🃏',
+    tagline: 'The original — no wilds, best hand wins.',
+    howTo: [
+      'Everyone posts the boot and gets three cards.',
+      'Bet blind (1x the stake) or look and play chaal (2x the stake).',
+      'Trail > Pure Sequence > Sequence > Colour > Pair > High Card.',
+      'Last player standing, or the best hand at a show, takes the pot.'
+    ],
+    config: {}
+  },
+  joker: {
+    id: 'joker',
+    name: 'Joker',
+    icon: '🤡',
+    tagline: 'One card is revealed each hand — that rank is wild.',
+    howTo: [
+      'After the deal, one card from the deck is turned face up.',
+      'Every card of that rank in any hand plays as a wild card.',
+      'A wild card becomes whatever makes your hand strongest.',
+      'Everything else is Classic Teen Patti.'
+    ],
+    config: { jokerReveal: true }
+  },
+  muflis: {
+    id: 'muflis',
+    name: 'Muflis',
+    icon: '🙃',
+    tagline: 'Lowball — the worst classic hand wins.',
+    howTo: [
+      'The ranking is fully reversed: the LOWEST hand wins the pot.',
+      'The best possible hand is 5-3-2 of mixed suits.',
+      'A trail of aces — the classic monster — is now the worst hand.',
+      'Betting, side shows and shows all work exactly as in Classic.'
+    ],
+    config: { reversed: true }
+  },
+  ak47: {
+    id: 'ak47',
+    name: 'AK47',
+    icon: '🔫',
+    tagline: 'Every Ace, King, 4 and 7 is wild.',
+    howTo: [
+      'All Aces, Kings, Fours and Sevens play as wild cards.',
+      'A wild card becomes whatever makes your hand strongest.',
+      'With 16 wilds in the deck, big hands come fast — bet accordingly.',
+      'Everything else is Classic Teen Patti.'
+    ],
+    config: { wildRanks: [14, 13, 4, 7] }
+  },
+  1942: {
+    id: '1942',
+    name: '1942',
+    icon: '🎬',
+    tagline: 'Every Ace, 9, 4 and 2 is wild.',
+    howTo: [
+      'All Aces, Nines, Fours and Twos play as wild cards.',
+      'A wild card becomes whatever makes your hand strongest.',
+      'Named after the film “1942: A Love Story”.',
+      'Everything else is Classic Teen Patti.'
+    ],
+    config: { wildRanks: [14, 9, 4, 2] }
+  },
+  fast: {
+    id: 'fast',
+    name: 'Fast',
+    icon: '⚡',
+    tagline: 'Blink and you miss it — 8 second turns, capped pot.',
+    howTo: [
+      'Only 8 seconds to act — run out of time and you pack.',
+      'The boot is doubled and the pot is capped at 40 boots.',
+      'When the pot cap is reached everyone left shows immediately.',
+      'Three betting rounds instead of four.'
+    ],
+    config: { turnSeconds: 8, maxRounds: 3, bootMultiplier: 2, potLimitBoots: 40 }
+  }
+};
+
+const MODE_IDS = ['classic', 'joker', 'muflis', 'ak47', '1942', 'fast'];
+
+function modeInfo(modeId) {
+  return MODES[modeId] || MODES.classic;
+}
+
+/**
+ * Resolve a mode into concrete table-config overrides.
+ * @param {string} modeId
+ * @param {{boot?: number}} base - the table's base boot, for relative knobs.
+ * @returns {object} overrides to spread into the TeenPattiTable config.
+ */
+function applyMode(modeId, { boot = 10 } = {}) {
+  const mode = modeInfo(modeId);
+  const { bootMultiplier, potLimitBoots, ...direct } = mode.config;
+  const resolvedBoot = Math.max(1, Math.round(boot * (bootMultiplier || 1)));
+  const overrides = { mode: mode.id, boot: resolvedBoot, ...direct };
+  if (potLimitBoots) overrides.potLimit = resolvedBoot * potLimitBoots;
+  return overrides;
+}
+
+__exports.default = { MODES, MODE_IDS, modeInfo, applyMode };
+
+__exports.MODES = MODES;
+__exports.MODE_IDS = MODE_IDS;
+__exports.modeInfo = modeInfo;
+__exports.applyMode = applyMode;
+});
 __define("src/engine/table.js", function (__exports, __require) {
 /**
  * Teen Patti table engine — a pure, host-agnostic state machine.
@@ -1978,7 +2233,7 @@ __define("src/engine/table.js", function (__exports, __require) {
  * which hosts drain and broadcast — they drive the animations and sounds.
  */
 
-const { makeDeck, shuffle, createRng, secureRandom } = __require("src/engine/cards.js");
+const { makeDeck, shuffle, createRng, secureRandom, parseCard, cardLabel, RANK_NAME } = __require("src/engine/cards.js");
 const { evaluate, compareKeys, CATEGORY_NAME, RANKING_CHART, handStrength, DEFAULT_RULES } = __require("src/engine/evaluator.js");
 
 const PHASE = {
@@ -2036,6 +2291,14 @@ const DEFAULT_CONFIG = {
   showTie: 'caller-loses',
   /** House rule for where the A-2-3 run ranks: 'a23-second' | 'a23-lowest'. */
   sequenceOrder: DEFAULT_RULES.sequenceOrder,
+  /** Game mode id — informational; the rules below are what the engine reads. */
+  mode: 'classic',
+  /** Muflis / lowball: the lowest classic hand wins. */
+  reversed: false,
+  /** Ranks that always play wild (AK47: [14,13,4,7], 1942: [14,9,4,2]). */
+  wildRanks: [],
+  /** Joker mode: reveal one card per hand — its rank plays wild everywhere. */
+  jokerReveal: false,
   /** What happens when the clock runs out. */
   timeoutAction: 'pack',
   /** Cost of calling a show: 'call' (the usual chaal amount) or 'double'. */
@@ -2104,8 +2367,14 @@ class TeenPattiTable {
      */
     this.rng = this.config.rng
       || (this.config.seed != null ? createRng(this.config.seed) : secureRandom);
-    /** House rules forwarded to the hand evaluator. */
-    this.rules = { sequenceOrder: this.config.sequenceOrder };
+    /** House rules forwarded to the hand evaluator (see DEFAULT_RULES). */
+    this.rules = {
+      sequenceOrder: this.config.sequenceOrder,
+      reversed: Boolean(this.config.reversed),
+      wildRanks: [...(this.config.wildRanks || [])]
+    };
+    /** Joker mode: the card revealed for the current hand (null otherwise). */
+    this.jokerCard = null;
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
@@ -2329,6 +2598,19 @@ class TeenPattiTable {
       this.pushEvent({ type: 'deal', playerId: player.id, seat, ante, allIn: player.allIn });
     }
 
+    // Joker mode: turn the next deck card face up — its rank is wild for
+    // everyone this hand. Static wilds (AK47/1942) always stay in force.
+    if (this.config.jokerReveal) {
+      this.jokerCard = deck[cursor];
+      cursor += 1;
+      const jokerRank = parseCard(this.jokerCard).rank;
+      this.rules.wildRanks = [...new Set([...(this.config.wildRanks || []), jokerRank])];
+      this.pushEvent({ type: 'joker', card: this.jokerCard, rank: jokerRank });
+      this.pushLog(`Joker revealed: ${cardLabel(this.jokerCard)} — every ${RANK_NAME[jokerRank]} is wild`);
+    } else {
+      this.jokerCard = null;
+    }
+
     this.stake = this.config.boot;
     this.pending = new Set(this.actionablePlayers.map((player) => player.id));
     this.phase = PHASE.BETTING;
@@ -2344,6 +2626,7 @@ class TeenPattiTable {
       dealerSeat: this.dealerSeat,
       pot: this.potTotal,
       stake: this.stake,
+      joker: this.jokerCard,
       players: entrants.map((player) => ({ id: player.id, seat: player.seat, committed: player.committed }))
     });
 
@@ -3100,6 +3383,13 @@ class TeenPattiTable {
         minBuyIn: this.config.minBuyIn,
         maxBuyIn: this.config.maxBuyIn
       },
+      mode: {
+        id: this.config.mode,
+        reversed: this.rules.reversed,
+        wildRanks: this.rules.wildRanks.slice(),
+        jokerCard: this.jokerCard,
+        sequenceOrder: this.rules.sequenceOrder
+      },
       seats,
       you,
       sideShow: this.sideShow
@@ -3113,7 +3403,9 @@ class TeenPattiTable {
       results: this.results,
       history: this.history.slice(0, 12),
       log: this.log.slice(-40),
-      rankingsChart: RANKING_CHART.map((entry) => ({ ...entry, name: CATEGORY_NAME[entry.category] }))
+      // Muflis flips the chart: strongest-first means weakest-classic-first.
+      rankingsChart: (this.rules.reversed ? [...RANKING_CHART].reverse() : RANKING_CHART)
+        .map((entry) => ({ ...entry, name: CATEGORY_NAME[entry.category] }))
     };
   }
 }
@@ -3345,6 +3637,8 @@ const DEFAULTS = {
     autoRebuy: true,           // top bots up in practice mode
     practicePlayers: 4,
     practiceBoot: 10,
+    /** Game mode for practice tables — an id from src/engine/modes.js. */
+    practiceMode: 'classic',
     practiceRounds: 4,
     practiceTimer: 25,
     /**
@@ -4320,14 +4614,19 @@ __define("public/js/practice.js", function (__exports, __require) {
 const { TeenPattiTable, PHASE, ACTION } = __require("src/engine/table.js");
 const { decideAction, PERSONALITIES } = __require("src/engine/ai.js");
 const { evaluate, handStrength } = __require("src/engine/evaluator.js");
+const { applyMode } = __require("src/engine/modes.js");
 const { AVATARS } = __require("public/js/store.js");
 
 const TICK = 200;
 const NEXT_HAND_DELAY = 3600;
 
-/** Bot pacing: 'normal' feels human, 'fast' is for tests and demos. */
+/**
+ * Bot pacing: 'normal' feels human, 'quick' matches the Fast game mode,
+ * 'fast' is for tests and demos.
+ */
 const PACE = {
   normal: { min: 700, max: 1600 },
+  quick: { min: 350, max: 800 },
   fast: { min: 90, max: 220 }
 };
 
@@ -4352,13 +4651,18 @@ class PracticeController {
 
   build() {
     const players = Math.max(2, Math.min(6, Number(this.settings.practicePlayers) || 4));
-    const boot = Number(this.settings.practiceBoot) || 10;
+    const baseBoot = Number(this.settings.practiceBoot) || 10;
     const turnSeconds = Number(this.settings.practiceTimer);
+    // The game mode is pure config: wilds, reversed ranking, timers, limits.
+    const modeId = this.settings.practiceMode || 'classic';
+    const modeConfig = applyMode(modeId, { boot: baseBoot });
+    const boot = modeConfig.boot;
+    // Fast mode plays at a quicker human tempo (unless a test forced 'fast').
+    if (modeId === 'fast' && this.pace === PACE.normal) this.pace = PACE.quick;
     this.table = new TeenPattiTable({
       id: `practice-${Math.random().toString(36).slice(2, 7)}`,
       name: 'Practice table',
       clock: () => Date.now(),
-      boot,
       startChips: Math.max(1000, boot * 100),
       maxBuyIn: Math.max(1000, boot * 100),
       minRaise: 1,
@@ -4366,7 +4670,9 @@ class PracticeController {
       turnSeconds: turnSeconds > 0 ? turnSeconds : 9999,
       sideshow: true,
       autoRebuy: this.settings.autoRebuy !== false,
-      maxPlayers: 6
+      maxPlayers: 6,
+      // Mode overrides win: they may set boot, wilds, reversed, timers, potLimit.
+      ...modeConfig
     });
 
     // Sit the human in the middle of the table so the ring looks balanced.
@@ -4667,6 +4973,8 @@ __define("public/js/game-view.js", function (__exports, __require) {
 
 const { PHASE, ACTION, raiseCostFor } = __require("src/engine/table.js");
 const { CATEGORY_LABEL } = __require("src/engine/evaluator.js");
+const { modeInfo } = __require("src/engine/modes.js");
+const { cardLabel } = __require("src/engine/cards.js");
 const { el, $, $$, cardEl, cardRow, toast, openModal, closeModal, formatChips, formatSigned, relativeTime, inviteLink, copyToClipboard } = __require("public/js/ui.js");
 
 const RING = (count) => {
@@ -4745,6 +5053,7 @@ class GameView {
       potDisplay: $('#pot-display'),
       stake: $('#game-stake'),
       round: $('#game-round'),
+      modePill: $('#game-mode'),
       chips: $('#game-chips'),
       seats: $('#seats'),
       dealArea: $('#deal-area'),
@@ -4825,6 +5134,24 @@ class GameView {
     this.els.stake.textContent = `Stake ${formatChips(snapshot.stake)}`;
     this.els.round.textContent = `Round ${Math.min(snapshot.round, snapshot.maxRounds)}/${snapshot.maxRounds}`;
     this.els.chips.textContent = `💠 ${formatChips(snapshot.you?.chips ?? 0)}`;
+
+    // Mode pill: hidden for plain Classic, otherwise mode name plus the live
+    // mode facts — the revealed joker card, or "lowest wins" for Muflis.
+    if (this.els.modePill) {
+      const mode = snapshot.mode;
+      const info = mode ? modeInfo(mode.id) : null;
+      const isPlainClassic = !mode || (mode.id === 'classic' && !mode.wildRanks?.length && !mode.reversed);
+      if (isPlainClassic) {
+        this.els.modePill.hidden = true;
+      } else {
+        const parts = [`${info.icon} ${info.name}`];
+        if (mode.jokerCard) parts.push(`joker ${cardLabel(mode.jokerCard)}`);
+        else if (mode.wildRanks?.length) parts.push('wilds on');
+        if (mode.reversed) parts.push('lowest wins');
+        this.els.modePill.textContent = parts.join(' · ');
+        this.els.modePill.hidden = false;
+      }
+    }
 
     if (previous && snapshot.pot > previous.pot) {
       this.els.potDisplay.classList.remove('bump');
@@ -5375,7 +5702,11 @@ class GameView {
           this.sound.shuffle();
           this.lastWinner = null;
           this.els.winnerHost.replaceChildren();
-          this.els.dealArea.replaceChildren(el('span', { class: 'pill', text: `Hand #${event.handNo} dealt — boot ${formatChips(snapshot?.config?.boot ?? 0)}` }));
+          const dealt = `Hand #${event.handNo} dealt — boot ${formatChips(snapshot?.config?.boot ?? 0)}`;
+          this.els.dealArea.replaceChildren(
+            el('span', { class: 'pill', text: dealt }),
+            ...(event.joker ? [el('span', { class: 'pill gold', text: `🤡 Joker: ${cardLabel(event.joker)} — that rank is wild` })] : [])
+          );
           const seats = this.snapshot?.seats || [];
           seats.forEach((seat, index) => {
             if (seat?.inHand) this.sound.deal(index % 4);
@@ -5392,6 +5723,10 @@ class GameView {
           break;
         case 'round':
           toast(`Betting round ${event.round} — stake ${formatChips(event.stake)}`, { timeout: 1800 });
+          break;
+        case 'joker':
+          this.sound.flip?.();
+          toast(`🤡 Joker revealed: ${cardLabel(event.card)} — every ${cardLabel(event.card).slice(0, -1)} is wild`, { timeout: 3200 });
           break;
         case 'sideshow:request':
           this.showSideShowPrompt(event);
@@ -5750,6 +6085,7 @@ const { OnlineController } = __require("public/js/net.js");
 const { GameView } = __require("public/js/game-view.js");
 const { RANKING_CHART, CATEGORY_LABEL } = __require("src/engine/evaluator.js");
 const { PERSONALITIES } = __require("src/engine/ai.js");
+const { MODES, MODE_IDS, modeInfo } = __require("src/engine/modes.js");
 const { el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSigned, inviteLink, copyToClipboard, isLocalHost } = __require("public/js/ui.js");
 
 /**
@@ -5889,6 +6225,7 @@ class App {
     this.renderProfileChip();
     this.renderStats();
     this.renderRankChart();
+    this.renderModePicker();
     this.bindLobby();
     this.bindGlobal();
     this.renderLeaderboard([]);
@@ -6142,6 +6479,65 @@ class App {
     ])));
   }
 
+  /**
+   * The game-mode picker in the lobby. Each mode is a card: click to select,
+   * ⓘ for a short "How to play" popup. The choice persists in settings and
+   * feeds straight into the practice table's config.
+   */
+  renderModePicker() {
+    const host = $('#mode-grid');
+    if (!host) return;
+    const current = this.store.settings.practiceMode || 'classic';
+    host.replaceChildren(...MODE_IDS.map((id) => {
+      const mode = modeInfo(id);
+      const card = el('button', {
+        class: `mode-card ${current === id ? 'selected' : ''}`,
+        title: mode.tagline,
+        onclick: () => {
+          this.store.setSetting('practiceMode', id);
+          this.renderModePicker();
+          this.sound.click?.();
+        }
+      }, [
+        el('span', { class: 'mode-icon', text: mode.icon }),
+        el('span', { class: 'mode-name', text: mode.name }),
+        el('span', {
+          class: 'mode-info',
+          text: 'ⓘ',
+          title: `How to play ${mode.name}`,
+          onclick: (event) => {
+            event.stopPropagation();
+            this.showModeHelp(id);
+          }
+        })
+      ]);
+      return card;
+    }));
+  }
+
+  showModeHelp(modeId) {
+    const mode = modeInfo(modeId);
+    openModal({
+      title: `${mode.icon} ${mode.name} — how to play`,
+      body: [
+        el('p', { class: 'muted', text: mode.tagline }),
+        el('ol', { class: 'rule-list' }, mode.howTo.map((line) => el('li', { text: line })))
+      ],
+      actions: [
+        {
+          label: `Play ${mode.name}`,
+          kind: 'primary',
+          onClick: () => {
+            this.store.setSetting('practiceMode', modeId);
+            this.renderModePicker();
+            this.startPractice();
+          }
+        },
+        { label: 'Close' }
+      ]
+    });
+  }
+
   renderLeaderboard(entries) {
     const host = $('#leaderboard');
     if (!entries?.length) {
@@ -6193,6 +6589,9 @@ class App {
         }),
         el('div', { class: 'tc-meta' }, [
           el('span', { class: 'badge gold', text: `boot ${formatChips(table.boot)}` }),
+          ...(table.mode && table.mode !== 'classic'
+            ? [el('span', { class: 'badge', text: `${modeInfo(table.mode).icon} ${modeInfo(table.mode).name}` })]
+            : []),
           el('span', { class: 'badge', text: `pot ${formatChips(table.pot)}` }),
           el('span', { class: 'badge', text: `hand #${table.handNo}` }),
           table.phase === 'betting'

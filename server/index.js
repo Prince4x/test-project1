@@ -14,6 +14,7 @@ import { attachWebSocketServer } from './ws.js';
 import { RoomManager } from './rooms.js';
 import { DEFAULT_CONFIG, TeenPattiTable } from '../src/engine/table.js';
 import { PERSONALITIES } from '../src/engine/ai.js';
+import { applyMode } from '../src/engine/modes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -245,6 +246,8 @@ const ws = attachWebSocketServer(server, {
 // themselves alive: once idle they recycle their bots for a fresh session.
 rooms.createRoom({ name: 'Friendly Table · 10 boot', config: { boot: 10, startChips: 1000, maxRounds: 3 }, bots: 3, keepAlive: true });
 rooms.createRoom({ name: 'High Roller · 100 boot', config: { boot: 100, startChips: 5000, maxBuyIn: 10000, maxRounds: 4 }, bots: 2, keepAlive: true });
+rooms.createRoom({ name: 'Joker Night · wild card', config: { ...applyMode('joker', { boot: 10 }), startChips: 1000, maxRounds: 3 }, bots: 3, keepAlive: true });
+rooms.createRoom({ name: 'Muflis · lowest wins', config: { ...applyMode('muflis', { boot: 10 }), startChips: 1000, maxRounds: 3 }, bots: 3, keepAlive: true });
 
 const loop = setInterval(() => rooms.tick(), 400);
 loop.unref?.();

@@ -694,6 +694,29 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .reaction-bar button { font-size: 19px; padding: 6px 9px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); }
 .reaction-bar button:hover { background: var(--gold-soft); }
 
+/* game mode picker */
+.mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mode-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 6px 8px; border-radius: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+  color: var(--text); transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.mode-card:hover { background: rgba(255, 255, 255, 0.08); transform: translateY(-1px); }
+.mode-card.selected {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  box-shadow: 0 0 14px rgba(245, 196, 81, 0.18);
+}
+.mode-card .mode-icon { font-size: 22px; line-height: 1; }
+.mode-card .mode-name { font-size: 12px; font-weight: 700; }
+.mode-card .mode-info {
+  position: absolute; top: 4px; right: 6px; font-size: 12px; color: var(--text-dim);
+  padding: 2px; border-radius: 50%;
+}
+.mode-card .mode-info:hover { color: var(--gold); }
+.pill.mode { border-color: var(--gold); color: var(--gold); }
+
 /* settings */
 .setting-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .setting-row:last-child { border-bottom: none; }

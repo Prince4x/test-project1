@@ -37,7 +37,7 @@
  * which hosts drain and broadcast — they drive the animations and sounds.
  */
 
-import { makeDeck, shuffle, createRng, secureRandom } from './cards.js';
+import { makeDeck, shuffle, createRng, secureRandom, parseCard, cardLabel, RANK_NAME } from './cards.js';
 import {
   evaluate,
   compareKeys,
@@ -102,6 +102,14 @@ export const DEFAULT_CONFIG = {
   showTie: 'caller-loses',
   /** House rule for where the A-2-3 run ranks: 'a23-second' | 'a23-lowest'. */
   sequenceOrder: DEFAULT_RULES.sequenceOrder,
+  /** Game mode id — informational; the rules below are what the engine reads. */
+  mode: 'classic',
+  /** Muflis / lowball: the lowest classic hand wins. */
+  reversed: false,
+  /** Ranks that always play wild (AK47: [14,13,4,7], 1942: [14,9,4,2]). */
+  wildRanks: [],
+  /** Joker mode: reveal one card per hand — its rank plays wild everywhere. */
+  jokerReveal: false,
   /** What happens when the clock runs out. */
   timeoutAction: 'pack',
   /** Cost of calling a show: 'call' (the usual chaal amount) or 'double'. */
@@ -170,8 +178,14 @@ export class TeenPattiTable {
      */
     this.rng = this.config.rng
       || (this.config.seed != null ? createRng(this.config.seed) : secureRandom);
-    /** House rules forwarded to the hand evaluator. */
-    this.rules = { sequenceOrder: this.config.sequenceOrder };
+    /** House rules forwarded to the hand evaluator (see DEFAULT_RULES). */
+    this.rules = {
+      sequenceOrder: this.config.sequenceOrder,
+      reversed: Boolean(this.config.reversed),
+      wildRanks: [...(this.config.wildRanks || [])]
+    };
+    /** Joker mode: the card revealed for the current hand (null otherwise). */
+    this.jokerCard = null;
   }
 
   // ─────────────────────────────────────────────────────────────── players ──
@@ -395,6 +409,19 @@ export class TeenPattiTable {
       this.pushEvent({ type: 'deal', playerId: player.id, seat, ante, allIn: player.allIn });
     }
 
+    // Joker mode: turn the next deck card face up — its rank is wild for
+    // everyone this hand. Static wilds (AK47/1942) always stay in force.
+    if (this.config.jokerReveal) {
+      this.jokerCard = deck[cursor];
+      cursor += 1;
+      const jokerRank = parseCard(this.jokerCard).rank;
+      this.rules.wildRanks = [...new Set([...(this.config.wildRanks || []), jokerRank])];
+      this.pushEvent({ type: 'joker', card: this.jokerCard, rank: jokerRank });
+      this.pushLog(`Joker revealed: ${cardLabel(this.jokerCard)} — every ${RANK_NAME[jokerRank]} is wild`);
+    } else {
+      this.jokerCard = null;
+    }
+
     this.stake = this.config.boot;
     this.pending = new Set(this.actionablePlayers.map((player) => player.id));
     this.phase = PHASE.BETTING;
@@ -410,6 +437,7 @@ export class TeenPattiTable {
       dealerSeat: this.dealerSeat,
       pot: this.potTotal,
       stake: this.stake,
+      joker: this.jokerCard,
       players: entrants.map((player) => ({ id: player.id, seat: player.seat, committed: player.committed }))
     });
 
@@ -1166,6 +1194,13 @@ export class TeenPattiTable {
         minBuyIn: this.config.minBuyIn,
         maxBuyIn: this.config.maxBuyIn
       },
+      mode: {
+        id: this.config.mode,
+        reversed: this.rules.reversed,
+        wildRanks: this.rules.wildRanks.slice(),
+        jokerCard: this.jokerCard,
+        sequenceOrder: this.rules.sequenceOrder
+      },
       seats,
       you,
       sideShow: this.sideShow
@@ -1179,7 +1214,9 @@ export class TeenPattiTable {
       results: this.results,
       history: this.history.slice(0, 12),
       log: this.log.slice(-40),
-      rankingsChart: RANKING_CHART.map((entry) => ({ ...entry, name: CATEGORY_NAME[entry.category] }))
+      // Muflis flips the chart: strongest-first means weakest-classic-first.
+      rankingsChart: (this.rules.reversed ? [...RANKING_CHART].reverse() : RANKING_CHART)
+        .map((entry) => ({ ...entry, name: CATEGORY_NAME[entry.category] }))
     };
   }
 }

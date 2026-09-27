@@ -10,6 +10,7 @@ import { OnlineController } from '/js/net.js';
 import { GameView } from '/js/game-view.js';
 import { RANKING_CHART, CATEGORY_LABEL } from '/engine/evaluator.js';
 import { PERSONALITIES } from '/engine/ai.js';
+import { MODES, MODE_IDS, modeInfo } from '/engine/modes.js';
 import {
   el, $, $$, toast, openModal, closeModal, cardRow, formatChips, formatSigned, inviteLink, copyToClipboard, isLocalHost
 } from '/js/ui.js';
@@ -151,6 +152,7 @@ class App {
     this.renderProfileChip();
     this.renderStats();
     this.renderRankChart();
+    this.renderModePicker();
     this.bindLobby();
     this.bindGlobal();
     this.renderLeaderboard([]);
@@ -404,6 +406,65 @@ class App {
     ])));
   }
 
+  /**
+   * The game-mode picker in the lobby. Each mode is a card: click to select,
+   * ⓘ for a short "How to play" popup. The choice persists in settings and
+   * feeds straight into the practice table's config.
+   */
+  renderModePicker() {
+    const host = $('#mode-grid');
+    if (!host) return;
+    const current = this.store.settings.practiceMode || 'classic';
+    host.replaceChildren(...MODE_IDS.map((id) => {
+      const mode = modeInfo(id);
+      const card = el('button', {
+        class: `mode-card ${current === id ? 'selected' : ''}`,
+        title: mode.tagline,
+        onclick: () => {
+          this.store.setSetting('practiceMode', id);
+          this.renderModePicker();
+          this.sound.click?.();
+        }
+      }, [
+        el('span', { class: 'mode-icon', text: mode.icon }),
+        el('span', { class: 'mode-name', text: mode.name }),
+        el('span', {
+          class: 'mode-info',
+          text: 'ⓘ',
+          title: `How to play ${mode.name}`,
+          onclick: (event) => {
+            event.stopPropagation();
+            this.showModeHelp(id);
+          }
+        })
+      ]);
+      return card;
+    }));
+  }
+
+  showModeHelp(modeId) {
+    const mode = modeInfo(modeId);
+    openModal({
+      title: `${mode.icon} ${mode.name} — how to play`,
+      body: [
+        el('p', { class: 'muted', text: mode.tagline }),
+        el('ol', { class: 'rule-list' }, mode.howTo.map((line) => el('li', { text: line })))
+      ],
+      actions: [
+        {
+          label: `Play ${mode.name}`,
+          kind: 'primary',
+          onClick: () => {
+            this.store.setSetting('practiceMode', modeId);
+            this.renderModePicker();
+            this.startPractice();
+          }
+        },
+        { label: 'Close' }
+      ]
+    });
+  }
+
   renderLeaderboard(entries) {
     const host = $('#leaderboard');
     if (!entries?.length) {
@@ -455,6 +516,9 @@ class App {
         }),
         el('div', { class: 'tc-meta' }, [
           el('span', { class: 'badge gold', text: `boot ${formatChips(table.boot)}` }),
+          ...(table.mode && table.mode !== 'classic'
+            ? [el('span', { class: 'badge', text: `${modeInfo(table.mode).icon} ${modeInfo(table.mode).name}` })]
+            : []),
           el('span', { class: 'badge', text: `pot ${formatChips(table.pot)}` }),
           el('span', { class: 'badge', text: `hand #${table.handNo}` }),
           table.phase === 'betting'

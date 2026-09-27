@@ -9,14 +9,19 @@
 import { TeenPattiTable, PHASE, ACTION } from '/engine/table.js';
 import { decideAction, PERSONALITIES } from '/engine/ai.js';
 import { evaluate, handStrength } from '/engine/evaluator.js';
+import { applyMode } from '/engine/modes.js';
 import { AVATARS } from '/js/store.js';
 
 const TICK = 200;
 const NEXT_HAND_DELAY = 3600;
 
-/** Bot pacing: 'normal' feels human, 'fast' is for tests and demos. */
+/**
+ * Bot pacing: 'normal' feels human, 'quick' matches the Fast game mode,
+ * 'fast' is for tests and demos.
+ */
 const PACE = {
   normal: { min: 700, max: 1600 },
+  quick: { min: 350, max: 800 },
   fast: { min: 90, max: 220 }
 };
 
@@ -41,13 +46,18 @@ export class PracticeController {
 
   build() {
     const players = Math.max(2, Math.min(6, Number(this.settings.practicePlayers) || 4));
-    const boot = Number(this.settings.practiceBoot) || 10;
+    const baseBoot = Number(this.settings.practiceBoot) || 10;
     const turnSeconds = Number(this.settings.practiceTimer);
+    // The game mode is pure config: wilds, reversed ranking, timers, limits.
+    const modeId = this.settings.practiceMode || 'classic';
+    const modeConfig = applyMode(modeId, { boot: baseBoot });
+    const boot = modeConfig.boot;
+    // Fast mode plays at a quicker human tempo (unless a test forced 'fast').
+    if (modeId === 'fast' && this.pace === PACE.normal) this.pace = PACE.quick;
     this.table = new TeenPattiTable({
       id: `practice-${Math.random().toString(36).slice(2, 7)}`,
       name: 'Practice table',
       clock: () => Date.now(),
-      boot,
       startChips: Math.max(1000, boot * 100),
       maxBuyIn: Math.max(1000, boot * 100),
       minRaise: 1,
@@ -55,7 +65,9 @@ export class PracticeController {
       turnSeconds: turnSeconds > 0 ? turnSeconds : 9999,
       sideshow: true,
       autoRebuy: this.settings.autoRebuy !== false,
-      maxPlayers: 6
+      maxPlayers: 6,
+      // Mode overrides win: they may set boot, wilds, reversed, timers, potLimit.
+      ...modeConfig
     });
 
     // Sit the human in the middle of the table so the ring looks balanced.

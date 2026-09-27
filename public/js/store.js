@@ -25,6 +25,8 @@ const DEFAULTS = {
     autoRebuy: true,           // top bots up in practice mode
     practicePlayers: 4,
     practiceBoot: 10,
+    /** Game mode for practice tables — an id from src/engine/modes.js. */
+    practiceMode: 'classic',
     practiceRounds: 4,
     practiceTimer: 25,
     /**

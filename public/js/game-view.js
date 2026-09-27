@@ -8,6 +8,8 @@
 
 import { PHASE, ACTION, raiseCostFor } from '/engine/table.js';
 import { CATEGORY_LABEL } from '/engine/evaluator.js';
+import { modeInfo } from '/engine/modes.js';
+import { cardLabel } from '/engine/cards.js';
 import { el, $, $$, cardEl, cardRow, toast, openModal, closeModal, formatChips, formatSigned, relativeTime, inviteLink, copyToClipboard } from '/js/ui.js';
 
 const RING = (count) => {
@@ -86,6 +88,7 @@ export class GameView {
       potDisplay: $('#pot-display'),
       stake: $('#game-stake'),
       round: $('#game-round'),
+      modePill: $('#game-mode'),
       chips: $('#game-chips'),
       seats: $('#seats'),
       dealArea: $('#deal-area'),
@@ -166,6 +169,24 @@ export class GameView {
     this.els.stake.textContent = `Stake ${formatChips(snapshot.stake)}`;
     this.els.round.textContent = `Round ${Math.min(snapshot.round, snapshot.maxRounds)}/${snapshot.maxRounds}`;
     this.els.chips.textContent = `💠 ${formatChips(snapshot.you?.chips ?? 0)}`;
+
+    // Mode pill: hidden for plain Classic, otherwise mode name plus the live
+    // mode facts — the revealed joker card, or "lowest wins" for Muflis.
+    if (this.els.modePill) {
+      const mode = snapshot.mode;
+      const info = mode ? modeInfo(mode.id) : null;
+      const isPlainClassic = !mode || (mode.id === 'classic' && !mode.wildRanks?.length && !mode.reversed);
+      if (isPlainClassic) {
+        this.els.modePill.hidden = true;
+      } else {
+        const parts = [`${info.icon} ${info.name}`];
+        if (mode.jokerCard) parts.push(`joker ${cardLabel(mode.jokerCard)}`);
+        else if (mode.wildRanks?.length) parts.push('wilds on');
+        if (mode.reversed) parts.push('lowest wins');
+        this.els.modePill.textContent = parts.join(' · ');
+        this.els.modePill.hidden = false;
+      }
+    }
 
     if (previous && snapshot.pot > previous.pot) {
       this.els.potDisplay.classList.remove('bump');
@@ -716,7 +737,11 @@ export class GameView {
           this.sound.shuffle();
           this.lastWinner = null;
           this.els.winnerHost.replaceChildren();
-          this.els.dealArea.replaceChildren(el('span', { class: 'pill', text: `Hand #${event.handNo} dealt — boot ${formatChips(snapshot?.config?.boot ?? 0)}` }));
+          const dealt = `Hand #${event.handNo} dealt — boot ${formatChips(snapshot?.config?.boot ?? 0)}`;
+          this.els.dealArea.replaceChildren(
+            el('span', { class: 'pill', text: dealt }),
+            ...(event.joker ? [el('span', { class: 'pill gold', text: `🤡 Joker: ${cardLabel(event.joker)} — that rank is wild` })] : [])
+          );
           const seats = this.snapshot?.seats || [];
           seats.forEach((seat, index) => {
             if (seat?.inHand) this.sound.deal(index % 4);
@@ -733,6 +758,10 @@ export class GameView {
           break;
         case 'round':
           toast(`Betting round ${event.round} — stake ${formatChips(event.stake)}`, { timeout: 1800 });
+          break;
+        case 'joker':
+          this.sound.flip?.();
+          toast(`🤡 Joker revealed: ${cardLabel(event.card)} — every ${cardLabel(event.card).slice(0, -1)} is wild`, { timeout: 3200 });
           break;
         case 'sideshow:request':
           this.showSideShowPrompt(event);

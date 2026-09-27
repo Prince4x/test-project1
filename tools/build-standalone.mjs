@@ -24,6 +24,7 @@ const DEFAULT_OUT = path.join(root, 'PLAY-ME-first.html');
 const MODULES = [
   'src/engine/cards.js',
   'src/engine/evaluator.js',
+  'src/engine/modes.js',
   'src/engine/table.js',
   'src/engine/ai.js',
   'public/js/store.js',

@@ -55,6 +55,7 @@ export class RoomManager {
       humans: room.humans.size,
       maxPlayers: room.table.config.maxPlayers,
       boot: room.table.config.boot,
+      mode: room.table.config.mode || 'classic',
       phase: room.table.phase,
       handNo: room.table.handNo,
       pot: room.table.potTotal,

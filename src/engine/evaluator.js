@@ -15,7 +15,7 @@
  * rank-ordered tie-breakers implemented below.
  */
 
-import { parseCard, RANK_LABEL, SUIT_NAME, SUIT_LABEL } from './cards.js';
+import { parseCard, makeCard, SUITS, RANK_LABEL, SUIT_NAME, SUIT_LABEL } from './cards.js';
 
 export const CATEGORY = {
   HIGH_CARD: 0,
@@ -93,8 +93,17 @@ export function sequenceHigh(ranks) {
  */
 export const SEQUENCE_ORDERS = ['a23-second', 'a23-lowest'];
 
+/**
+ * House rules the evaluator understands. Every game mode is expressed purely
+ * through this object — the evaluation logic itself is never duplicated:
+ *   - sequenceOrder: where the A-2-3 run ranks (see above).
+ *   - reversed:      Muflis / lowball — the *lowest* classic hand wins.
+ *   - wildRanks:     ranks that play as wild cards (Joker, AK47, 1942, …).
+ */
 export const DEFAULT_RULES = Object.freeze({
-  sequenceOrder: 'a23-second'
+  sequenceOrder: 'a23-second',
+  reversed: false,
+  wildRanks: Object.freeze([])
 });
 
 /**
@@ -111,17 +120,10 @@ export function runOrderValue(run, sequenceOrder = DEFAULT_RULES.sequenceOrder) 
 }
 
 /**
- * Evaluate three cards.
- * @param {string[]} cards - exactly three card ids, e.g. ['AS', 'KH', '10D'].
- * @param {{sequenceOrder?: string}} [rules] - house rules (see DEFAULT_RULES).
- * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
- *            key: number[], name: string, label: string, high: number}}
+ * Classic evaluation of three literal cards — no wilds, no reversal.
+ * The mode-aware `evaluate()` below builds on this.
  */
-export function evaluate(cards, rules = DEFAULT_RULES) {
-  if (!Array.isArray(cards) || cards.length !== 3) {
-    throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
-  }
-  const sequenceOrder = rules?.sequenceOrder || DEFAULT_RULES.sequenceOrder;
+function evaluateBase(cards, sequenceOrder) {
   const parsed = cards.map(parseCard);
   const ranks = descRanks(cards);
   const suits = parsed.map((card) => card.suit);
@@ -178,6 +180,103 @@ export function evaluate(cards, rules = DEFAULT_RULES) {
     run
   };
   result.text = describe(result);
+  return result;
+}
+
+/**
+ * Substitution candidates for one wild card. Only two suits ever matter:
+ * the suit that could complete a flush/pure sequence (the first fixed card's
+ * suit) and an off-suit that avoids one. Off-suits rotate per wild so several
+ * wilds can always land on different suits (needed to dodge an accidental
+ * Colour in Muflis). 13 ranks × 2 suits = 26 candidates per wild.
+ */
+function wildCandidates(flushSuit, wildIndex) {
+  const offs = SUITS.filter((suit) => suit !== flushSuit);
+  const offSuit = offs[wildIndex % offs.length];
+  const list = [];
+  for (let rank = 2; rank <= 14; rank += 1) {
+    list.push(makeCard(rank, flushSuit));
+    list.push(makeCard(rank, offSuit));
+  }
+  return list;
+}
+
+/**
+ * Evaluate three cards under the mode's house rules.
+ *
+ * Wild cards: every possible substitution is tried and the best resulting
+ * hand under the current ranking is kept — the *lowest* hand when `reversed`
+ * (Muflis). Reversal itself is expressed in the comparison `key`: element-wise
+ * negation inverts the whole ordering, so every consumer that compares keys
+ * (showdown, side show, side pots, the AI) is mode-aware for free.
+ *
+ * @param {string[]} cards - exactly three card ids, e.g. ['AS', 'KH', '10D'].
+ * @param {{sequenceOrder?: string, reversed?: boolean, wildRanks?: number[]}} [rules]
+ * @returns {{cards: string[], ranks: number[], category: number, tiebreak: number[],
+ *            key: number[], name: string, label: string, high: number,
+ *            reversed: boolean, wildCount: number, effectiveCards: string[]}}
+ */
+export function evaluate(cards, rules = DEFAULT_RULES) {
+  if (!Array.isArray(cards) || cards.length !== 3) {
+    throw new Error(`Teen Patti hands are exactly 3 cards (received ${cards?.length})`);
+  }
+  const sequenceOrder = rules?.sequenceOrder || DEFAULT_RULES.sequenceOrder;
+  const reversed = Boolean(rules?.reversed);
+  const wildRanks = rules?.wildRanks?.length ? rules.wildRanks : null;
+
+  const parsed = cards.map(parseCard);
+  const wildIndices = wildRanks
+    ? parsed.map((card, index) => (wildRanks.includes(card.rank) ? index : -1)).filter((i) => i >= 0)
+    : [];
+
+  let base;
+  let effectiveCards = cards.slice();
+
+  if (!wildIndices.length) {
+    base = evaluateBase(cards, sequenceOrder);
+  } else {
+    // The suit that keeps a flush possible: any fixed card's suit (all fixed
+    // cards share it or no flush exists anyway), or spades with no fixed cards.
+    const fixed = parsed.filter((_, index) => !wildIndices.includes(index));
+    const flushSuit = fixed[0]?.suit || 'S';
+    const options = wildIndices.map((_, k) => wildCandidates(flushSuit, k));
+
+    let best = null;
+    let bestCards = null;
+    const chosen = new Array(wildIndices.length);
+    const search = (depth) => {
+      if (depth === wildIndices.length) {
+        const hand = cards.slice();
+        wildIndices.forEach((cardIndex, k) => { hand[cardIndex] = chosen[k]; });
+        const candidate = evaluateBase(hand, sequenceOrder);
+        const better = !best || (reversed
+          ? compareKeys(candidate.key, best.key) < 0
+          : compareKeys(candidate.key, best.key) > 0);
+        if (better) { best = candidate; bestCards = hand; }
+        return;
+      }
+      for (const card of options[depth]) {
+        chosen[depth] = card;
+        search(depth + 1);
+      }
+    };
+    search(0);
+    base = best;
+    effectiveCards = bestCards;
+  }
+
+  const result = {
+    ...base,
+    cards: cards.slice(),
+    effectiveCards,
+    wildCount: wildIndices.length,
+    wildIndices,
+    reversed,
+    key: reversed ? base.key.map((value) => -value) : base.key
+  };
+  if (wildIndices.length) {
+    result.text = `${base.text} · ${wildIndices.length} wild${wildIndices.length > 1 ? 's' : ''}`;
+  }
   return result;
 }
 
@@ -247,6 +346,12 @@ export function bestOf(entries) {
  * score that keeps relative spacing between categories sensible for betting.
  */
 export function handStrength(evaluation) {
+  // Muflis: the ranking is fully reversed, so the ordinal score simply flips.
+  if (evaluation.reversed) return 1 - classicStrength(evaluation);
+  return classicStrength(evaluation);
+}
+
+function classicStrength(evaluation) {
   const [top, second, third] = evaluation.tiebreak;
   const kicker = (evalObj, index) => (evalObj.tiebreak[index] ?? 0) / 14;
   switch (evaluation.category) {
