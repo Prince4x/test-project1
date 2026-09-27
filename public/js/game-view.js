@@ -140,6 +140,8 @@ export class GameView {
     this.snapshot = null;
     this.seatAnim = new Map();
     this.myCardsKey = null;
+    this.actionBarKey = null;
+    this.potChipsKey = null;
     this.clearFloaters();
     this.els.seats.replaceChildren();
     this.chatLog = [];
@@ -207,6 +209,8 @@ export class GameView {
   }
 
   renderPotChips(pot) {
+    if (pot === this.potChipsKey) return; // unchanged pot → untouched DOM
+    this.potChipsKey = pot;
     const denominations = [500, 100, 50, 10, 5];
     const chips = [];
     let left = Math.min(pot, 3000);
@@ -274,17 +278,22 @@ export class GameView {
         : seat.connected ? seat.name : `${seat.name} · disconnected`;
       node.refs.chips.textContent = seat.sittingOut ? 'out of chips' : `💠 ${formatChips(seat.chips)}`;
 
-      // badges
-      const badges = [];
-      if (seat.isDealer) badges.push(el('span', { class: 'tag dealer', text: 'D' }));
+      // badges — like the cards, only rebuilt when they actually change so
+      // re-renders never re-create (and repaint) unchanged nodes.
+      const badgeSpecs = [];
+      if (seat.isDealer) badgeSpecs.push(['tag dealer', 'D']);
       if (seat.inHand && !seat.packed) {
-        badges.push(el('span', { class: `tag ${seat.seen ? 'seen' : 'blind'}`, text: seat.seen ? 'seen' : 'blind' }));
+        badgeSpecs.push([`tag ${seat.seen ? 'seen' : 'blind'}`, seat.seen ? 'seen' : 'blind']);
       }
-      if (seat.allIn) badges.push(el('span', { class: 'tag allin', text: 'all-in' }));
-      if (seat.packed && seat.inHand) badges.push(el('span', { class: 'tag packed', text: 'packed' }));
-      if (seat.isBot) badges.push(el('span', { class: 'tag', text: 'AI' }));
-      if (!seat.connected && !seat.isBot) badges.push(el('span', { class: 'tag offline', text: 'offline' }));
-      node.refs.badges.replaceChildren(...badges);
+      if (seat.allIn) badgeSpecs.push(['tag allin', 'all-in']);
+      if (seat.packed && seat.inHand) badgeSpecs.push(['tag packed', 'packed']);
+      if (seat.isBot) badgeSpecs.push(['tag', 'AI']);
+      if (!seat.connected && !seat.isBot) badgeSpecs.push(['tag offline', 'offline']);
+      const badgesKey = badgeSpecs.map((spec) => spec.join(':')).join('|');
+      if (node.badgesKey !== badgesKey) {
+        node.badgesKey = badgesKey;
+        node.refs.badges.replaceChildren(...badgeSpecs.map(([cls, text]) => el('span', { class: cls, text })));
+      }
 
       // committed chips bubble
       if (seat.committed > 0 && seat.inHand) {
@@ -491,9 +500,25 @@ export class GameView {
     return 'Cautious — chud pack if the betting gets heavy.';
   }
 
+  /**
+   * The action bar is expensive to repaint (it sits on a blurred panel), and
+   * rebuilding it on every snapshot made the whole bottom of the table
+   * flicker each time anybody acted. So the bar is built into a detached
+   * scratch node first and only swapped into the page when its rendered HTML
+   * actually differs — hover states, the raise slider and the countdown text
+   * all survive unrelated state updates untouched.
+   */
   renderActionBar(snapshot) {
+    const scratch = el('div');
+    this.buildActionBar(scratch, snapshot);
+    const key = scratch.innerHTML;
+    if (key === this.actionBarKey) return;
+    this.actionBarKey = key;
+    this.els.actionBar.replaceChildren(...scratch.childNodes);
+  }
+
+  buildActionBar(bar, snapshot) {
     const you = snapshot.you;
-    const bar = this.els.actionBar;
 
     if (!you) {
       bar.replaceChildren(el('div', { class: 'turn-banner waiting' }, [el('span', { text: 'Joining the table…' })]));

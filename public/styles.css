@@ -499,7 +499,9 @@ body[data-theme='light'] .player-panel { background: linear-gradient(180deg, rgb
 .my-cards .hand-label span { font-size: 11.5px; color: var(--text-dim); }
 .hole-cards { display: flex; gap: 8px; }
 
-.action-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+/* min-height matches the buttons row so swapping banner <-> buttons never
+   changes the panel height — the felt above stayed put instead of jumping. */
+.action-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; min-height: 58px; }
 .action-bar .group {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: 14px;
