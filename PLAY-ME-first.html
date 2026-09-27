@@ -5259,19 +5259,38 @@ class GameView {
         node.refs.bubble.hidden = true;
       }
 
-      // cards
+      // cards — only rebuilt when they actually change. Rebuilding on every
+      // snapshot re-created the nodes with their animation classes, so
+      // face-down hands (faces stays empty all hand) replayed the deal-in
+      // animation on every state update. The key lives on the seat node:
+      // a ring rebuild drops it, forcing a quiet repopulate of the new node.
       const faces = seat.cards || [];
-      const previousCount = this.seatAnim.get(seat.id)?.faceCount ?? 0;
-      node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previousCount));
+      // The animation memory is per hand: a new hand starts from a clean
+      // slate so its deal animation plays, while re-renders and ring
+      // rebuilds inside the same hand stay quiet.
+      const remembered = this.seatAnim.get(seat.id);
+      const previous = remembered && remembered.handNo === snapshot.handNo
+        ? remembered
+        : { faceCount: 0, cardCount: 0 };
+      const cardsKey = `${snapshot.handNo}|${seat.inHand}|${faces.join(',')}`;
+      if (node.cardsKey !== cardsKey) {
+        node.cardsKey = cardsKey;
+        node.refs.hand.replaceChildren(...this.seatCards(seat, faces, previous));
+        if (faces.length === 3 && previous.faceCount < 3) {
+          this.sound.flip();
+        }
+      }
       node.refs.hand.hidden = !seat.inHand || (seat.packed && !faces.length);
       // A folded hand greys out at the showdown. Derived from state rather than
       // from the transition, so it survives a rebuild and never sticks around
       // into the next hand.
       node.refs.hand.classList.toggle('dim', Boolean(seat.packed) && snapshot.phase === PHASE.SETTLED);
-      if (faces.length === 3 && previousCount < 3) {
-        this.sound.flip();
-      }
-      this.seatAnim.set(seat.id, { faceCount: faces.length, packed: seat.packed });
+      this.seatAnim.set(seat.id, {
+        handNo: snapshot.handNo,
+        faceCount: faces.length,
+        cardCount: seat.inHand ? 3 : 0,
+        packed: seat.packed
+      });
 
       // status line under the seat
       let status = '';
@@ -5308,12 +5327,20 @@ class GameView {
     }
   }
 
-  seatCards(seat, faces, previousCount) {
+  /**
+   * Build a seat's three cards. `previous` is the seat's animation memory
+   * ({faceCount, cardCount}) from BEFORE this render:
+   *   - backs only fly in when the seat had no cards at all (a fresh deal) —
+   *     previously they animated whenever faceCount was 0, which is true for
+   *     the entire hand of any face-down opponent;
+   *   - faces only flip on the first reveal.
+   */
+  seatCards(seat, faces, previous = { faceCount: 0, cardCount: 0 }) {
     if (!seat.inHand) return [];
     if (faces.length === 3) {
       return faces.map((card, index) => {
         const node = cardEl(card, { size: 'sm' });
-        if (previousCount < 3) {
+        if (previous.faceCount < 3) {
           node.classList.add('flip');
           node.style.animationDelay = `${index * 90}ms`;
         }
@@ -5321,7 +5348,7 @@ class GameView {
       });
     }
     return [0, 1, 2].map((index) => {
-      const node = cardEl(null, { size: 'sm', animate: previousCount === 0 });
+      const node = cardEl(null, { size: 'sm', animate: previous.cardCount === 0 });
       node.style.setProperty('--dx', '-120px');
       node.style.setProperty('--dy', '-40px');
       node.style.animationDelay = `${index * 90}ms`;

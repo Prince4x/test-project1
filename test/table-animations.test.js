@@ -172,7 +172,31 @@ test('animations do not outlive the table, and a second game still animates', { 
       'the hand is still shown face-up after the rebuild'
     );
 
-    // ── 4. your own hole cards do not re-flip on every state update ─────────
+    // ── 4a. opponents' face-down cards do not re-deal on every state update ─
+    // The regression: seatAnim tracked only faceCount, which stays 0 for a
+    // hidden hand, so every render rebuilt the card backs with the .dealt
+    // fly-in class — opponents' cards visibly re-dealt on every bot action.
+    {
+      const opponentEntry = [...view.seats.entries()].find(([id, node]) =>
+        id !== '__empty' && id !== seatId && node.refs?.hand?.querySelectorAll('.pcard').length === 3);
+      if (opponentEntry) {
+        const [opponentId] = opponentEntry;
+        const handNoNow = view.snapshot.handNo;
+        const beforeBacks = [...opponentEntry[1].refs.hand.querySelectorAll('.pcard')];
+        view.render(view.snapshot, view.tableInfo);
+        view.render(view.snapshot, view.tableInfo);
+        if (view.snapshot.handNo === handNoNow) {
+          const afterBacks = [...view.seats.get(opponentId).refs.hand.querySelectorAll('.pcard')];
+          assert.deepEqual(
+            afterBacks.map((node) => beforeBacks.includes(node)),
+            beforeBacks.map(() => true),
+            "opponents' unchanged cards keep their DOM nodes — no re-dealt fly-in on re-render"
+          );
+        }
+      }
+    }
+
+    // ── 4b. your own hole cards do not re-flip on every state update ────────
     // The regression: renderMyArea rebuilt the hole cards on EVERY snapshot,
     // re-applying .flip each time, so the player's own cards kept flipping
     // for ever. With the fix, re-rendering the same state must keep the very
