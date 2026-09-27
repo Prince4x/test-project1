@@ -214,7 +214,10 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, {
         'Content-Type': type,
         'Content-Length': stat.size,
-        'Cache-Control': 'no-cache',
+        // no-store, not no-cache: after a bug fix the very next reload must
+        // run the new code — through any proxy, with no 304 reuse of stale
+        // modules. The whole client is ~300 KB; re-sending it is nothing.
+        'Cache-Control': 'no-store',
         'Last-Modified': stat.mtime.toUTCString()
       });
       if (req.method === 'HEAD') {
@@ -227,7 +230,7 @@ const server = http.createServer(async (req, res) => {
 
     // Single-page app fallback.
     const index = path.join(ROOT, 'public', 'index.html');
-    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
     fs.createReadStream(index).pipe(res);
   } catch (error) {
     sendJson(res, 400, { error: error.message });

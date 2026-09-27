@@ -1157,6 +1157,17 @@ class App {
   }
 }
 
+/**
+ * Build stamp: shows up in the console and on <body data-build> so "is the
+ * browser actually running the new code?" is answerable in two seconds.
+ * Bump when shipping a fix a player needs to verify.
+ */
+export const CLIENT_BUILD = '2026-09-27c';
+try {
+  document.body.dataset.build = CLIENT_BUILD;
+  console.info(`🎴 Teen Patti Arena — client build ${CLIENT_BUILD}`);
+} catch { /* jsdom or very old browsers */ }
+
 const app = new App().init();
 app.refreshTables();
 window.app = app;   // handy for debugging from the console
